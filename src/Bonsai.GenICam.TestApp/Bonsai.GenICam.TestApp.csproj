@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>Bonsai.GenICam.TestApp</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bonsai.GenICam\Bonsai.GenICam.csproj" />
+    <PackageReference Include="OpenCV.Net" Version="3.4.2" />
+    <PackageReference Include="OpenCV.Net.runtime.win-x64" Version="2.4.13" />
+  </ItemGroup>
+
+  <!-- .NET Framework SDK-style projects don't auto-copy runtimes/ native DLLs; do it explicitly. -->
+  <Target Name="CopyOpenCVNativeDlls" AfterTargets="Build">
+    <ItemGroup>
+      <OpenCVDll Include="$(NuGetPackageRoot)opencv.net.runtime.win-x64\2.4.13\runtimes\win-x64\native\vc14\bin\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OpenCVDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

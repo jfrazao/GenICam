@@ -1,0 +1,16 @@
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\obj\Debug\net472\Bonsai.GenICam.csproj.AssemblyReference.cache
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\obj\Debug\net472\Bonsai.GenICam.GeneratedMSBuildEditorConfig.editorconfig
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\obj\Debug\net472\Bonsai.GenICam.AssemblyInfoInputs.cache
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\obj\Debug\net472\Bonsai.GenICam.AssemblyInfo.cs
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\obj\Debug\net472\Bonsai.GenICam.csproj.CoreCompileInputs.cache
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\bin\Debug\net472\Bonsai.GenICam.dll
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\bin\Debug\net472\Bonsai.GenICam.pdb
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\bin\Debug\net472\Bonsai.Core.dll
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\bin\Debug\net472\OpenCV.Net.dll
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\bin\Debug\net472\System.Reactive.Core.dll
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\bin\Debug\net472\System.Reactive.Interfaces.dll
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\bin\Debug\net472\System.Reactive.Linq.dll
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\bin\Debug\net472\System.Reactive.PlatformServices.dll
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\obj\Debug\net472\Bonsai.G.5B491AD9.Up2Date
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\obj\Debug\net472\Bonsai.GenICam.dll
+c:\git\jfrazao\genicam\src\Bonsai.GenICam\obj\Debug\net472\Bonsai.GenICam.pdb

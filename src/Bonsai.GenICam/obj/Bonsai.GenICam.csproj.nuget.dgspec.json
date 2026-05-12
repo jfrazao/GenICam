@@ -1,0 +1,70 @@
+{
+  "format": 1,
+  "restore": {
+    "c:\\git\\jfrazao\\genicam\\src\\Bonsai.GenICam\\Bonsai.GenICam.csproj": {}
+  },
+  "projects": {
+    "c:\\git\\jfrazao\\genicam\\src\\Bonsai.GenICam\\Bonsai.GenICam.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "c:\\git\\jfrazao\\genicam\\src\\Bonsai.GenICam\\Bonsai.GenICam.csproj",
+        "projectName": "Bonsai.GenICam",
+        "projectPath": "c:\\git\\jfrazao\\genicam\\src\\Bonsai.GenICam\\Bonsai.GenICam.csproj",
+        "packagesPath": "C:\\Users\\jfraz\\.nuget\\packages\\",
+        "outputPath": "c:\\git\\jfrazao\\genicam\\src\\Bonsai.GenICam\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "c:\\git\\jfrazao\\genicam\\NuGet.Config",
+          "C:\\Users\\jfraz\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net472"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Users\\jfraz\\Downloads\\Packages": {},
+          "C:\\msys64\\mingw64\\bin": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net472": {
+            "targetAlias": "net472",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net472": {
+          "targetAlias": "net472",
+          "dependencies": {
+            "Bonsai.Core": {
+              "target": "Package",
+              "version": "[2.9.0, )"
+            },
+            "OpenCV.Net": {
+              "target": "Package",
+              "version": "[3.4.2, )"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306\\RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
