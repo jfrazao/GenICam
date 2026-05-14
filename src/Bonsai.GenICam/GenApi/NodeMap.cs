@@ -127,7 +127,7 @@ namespace Bonsai.GenICam.GenApi
                     continue;
                 }
 
-                NodeBase node = ParseElement(el, ns, name);
+                NodeBase? node = ParseElement(el, ns, name);
                 if (node != null)
                 {
                     node.Description = ((string)el.Element(ns + "Description") ?? (string)el.Element(ns + "ToolTip"))?.Trim();
@@ -136,7 +136,7 @@ namespace Bonsai.GenICam.GenApi
             }
         }
 
-        private static string[] ParsePAddresses(XElement el, XNamespace ns)
+        private static string[]? ParsePAddresses(XElement el, XNamespace ns)
         {
             var list = new System.Collections.Generic.List<string>();
             foreach (var pa in el.Elements(ns + "pAddress"))
@@ -144,7 +144,7 @@ namespace Bonsai.GenICam.GenApi
             return list.Count > 0 ? list.ToArray() : null;
         }
 
-        private static NodeBase ParseElement(XElement el, XNamespace ns, string name)
+        private static NodeBase? ParseElement(XElement el, XNamespace ns, string name)
         {
             var accessMode = ParseAccessMode((string)el.Element(ns + "AccessMode") ?? (string)el.Attribute("AccessMode") ?? "RW");
 
@@ -299,7 +299,7 @@ namespace Bonsai.GenICam.GenApi
                     foreach (var v in el.Elements(ns + "pVariable"))
                     {
                         string varName = (string)v.Attribute("Name");
-                        if (varName != null) vars[varName] = v.Value?.Trim();
+                        if (varName != null) vars[varName] = v.Value.Trim();
                     }
                     return new IntSwissKnifeNode
                     {
@@ -316,7 +316,7 @@ namespace Bonsai.GenICam.GenApi
                     foreach (var v in el.Elements(ns + "pVariable"))
                     {
                         string varName = (string)v.Attribute("Name");
-                        if (varName != null) vars[varName] = v.Value?.Trim();
+                        if (varName != null) vars[varName] = v.Value.Trim();
                     }
                     return new SwissKnifeNode
                     {
@@ -464,7 +464,7 @@ namespace Bonsai.GenICam.GenApi
             throw new KeyNotFoundException($"GenICam feature '{name}' not found in device XML.");
         }
 
-        private NodeBase ResolveRef(string refName)
+        private NodeBase ResolveRef(string? refName)
         {
             if (refName == null) throw new InvalidOperationException("Null pValue reference.");
             return Resolve(refName);
@@ -806,8 +806,9 @@ namespace Bonsai.GenICam.GenApi
             return result;
         }
 
-        private static double EvaluateFormula(string formula, Dictionary<string, double> vars)
+        private static double EvaluateFormula(string? formula, Dictionary<string, double> vars)
         {
+            if (formula == null) throw new InvalidOperationException("Null formula reference.");
             return new FormulaEvaluator(formula, vars).ParseTernary();
         }
 

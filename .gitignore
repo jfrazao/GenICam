@@ -15,7 +15,11 @@
 project.lock.json
 packages/
 
-# Bonsai local environment (executables and downloaded packages)
+# Build artifacts
+/artifacts/
+
+# Bonsai local environment (executables, downloaded packages, editor state)
 .bonsai/Packages/
 .bonsai/*.exe
 .bonsai/*.exe.*
+.bonsai/Settings/

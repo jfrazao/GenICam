@@ -81,7 +81,7 @@ namespace Bonsai.GenICam.GenTL
         }
 
         // Blocks until a buffer arrives (or timeout ms elapses). Returns null on timeout or abort.
-        internal IplImage WaitForFrame(uint timeoutMs)
+        internal IplImage? WaitForFrame(uint timeoutMs)
         {
             // S_EVENT_NEW_BUFFER = { BUFFER_HANDLE BufferHandle; void* pUserPointer; }
             var eventData = new byte[2 * IntPtr.Size];

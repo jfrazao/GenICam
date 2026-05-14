@@ -12,7 +12,7 @@ namespace Bonsai.GenICam
     {
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
-        public string ProducerPath { get; set; }
+        public string? ProducerPath { get; set; }
 
         public override IObservable<DeviceInfo[]> Generate()
         {
@@ -26,7 +26,7 @@ namespace Bonsai.GenICam
 
             IEnumerable<string> producers = string.IsNullOrWhiteSpace(ProducerPath)
                 ? GenTLLoader.FindProducers()
-                : new[] { ProducerPath };
+                : new[] { ProducerPath! };
 
             lock (GenTLLoader.ScanLock)
             foreach (string ctiPath in producers)

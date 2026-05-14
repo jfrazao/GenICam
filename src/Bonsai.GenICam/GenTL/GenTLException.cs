@@ -8,7 +8,7 @@ namespace Bonsai.GenICam.GenTL
     {
         public int ErrorCode { get; }
 
-        public GenTLException(int errorCode, string message = null)
+        public GenTLException(int errorCode, string? message = null)
             : base(message ?? $"GenTL error {(GCError)errorCode} ({errorCode})")
         {
             ErrorCode = errorCode;
