@@ -6,12 +6,14 @@ A [Bonsai](https://bonsai-rx.org) package for acquiring images and reading/writi
 
 - Windows x64
 - [.NET Framework 4.7.2](https://dotnet.microsoft.com/download/dotnet-framework/net472)
-- A **GenTL producer** (`.cti` file) from your camera vendor, e.g.:
-  - Basler Pylon — `PylonUsb.cti` / `PylonGigE.cti`
-  - IDS — `idsGenTL.cti`
-  - FLIR Spinnaker — `FLIR_GenTL_v3_4.cti`
-  - Allied Vision Vimba — `VimbaUSBTL.cti`
-- The `GENICAM_GENTL64_PATH` environment variable must point to the folder containing the `.cti` file(s)
+- The **camera vendor runtime** installed for the camera you intend to use. The runtime ships a GenTL producer (`.cti` file) and registers it by adding its folder to the `GENICAM_GENTL64_PATH` environment variable automatically. Examples:
+  - **Basler** — [Pylon Camera Software Suite](https://www.baslerweb.com/pylon) (provides `PylonUsb.cti`, `PylonGigE.cti`)
+  - **IDS** — [IDS peak / uEye](https://en.ids-imaging.com/ids-peak.html) (provides `idsGenTL.cti`)
+  - **FLIR / Teledyne** — [Spinnaker SDK](https://www.flir.com/products/spinnaker-sdk/) (provides `FLIR_GenTL_v3_4.cti`)
+  - **Allied Vision** — [Vimba X](https://www.alliedvision.com/vimba) (provides `VimbaUSBTL.cti`, `VimbaGigETL.cti`)
+  - **HIKVISION** — [MVS SDK](https://www.hikrobotics.com/en/machinevision/service/download) (provides `MvGenTLProducer.cti`)
+
+  After installation, verify the variable is set: `echo $env:GENICAM_GENTL64_PATH` should return one or more paths containing `.cti` files.
 
 ## Bonsai Operators
 
@@ -21,6 +23,8 @@ A [Bonsai](https://bonsai-rx.org) package for acquiring images and reading/writi
 | `EnumerateDevices` | `Source<DeviceInfo[]>` | Lists all detected GenICam cameras |
 | `GetFeatureNode` | `Source<FeatureValue>` | Reads a named feature (e.g. `ExposureTime`) |
 | `SetFeatureNode` | `Combinator` | Writes a named feature on each upstream element |
+| `ListFeatureValues` | `Source<FeatureValue[]>` | Reads all readable features from a device |
+| `FeaturePropertyPage` | `Source<FeatureValue[]>` | Interactive WinForms grid for browsing and editing features |
 
 ### Using in Bonsai
 
@@ -64,10 +68,12 @@ dotnet build src/Bonsai.GenICam.TestApp/Bonsai.GenICam.TestApp.csproj -c Release
 
 ### What it does
 
-1. **Enumerates** all GenTL cameras and prints vendor/model/serial
-2. **Extracts GenICam XML** from every detected camera and saves each file to `example-camera-xml/` next to the exe
-3. **Lists all readable features** for the target device
-4. **Captures 5 frames** from the target device and prints dimensions
+1. **Enumerates** all GenTL cameras and prints vendor/model/serial — verifies producer loading and device discovery
+2. **Extracts GenICam XML** from every detected camera and saves each file to `example-camera-xml/` next to the exe — verifies `GCReadPort` and XML parsing
+3. **Lists all readable features** for the target device — verifies the GenAPI NodeMap across all node types
+4. **Captures 5 frames** from the target device and prints dimensions — verifies the buffer acquisition loop and `IplImage` construction
+
+Running it successfully end-to-end confirms that GenTL producer loading, device enumeration, feature access, and image acquisition all work with your camera and driver.
 
 ### Example output
 
@@ -120,6 +126,125 @@ Two implementation layers:
 **GenTL runtime loader** (`src/Bonsai.GenICam/GenTL/`) — Pure C# dynamic P/Invoke. Scans `GENICAM_GENTL64_PATH` for `.cti` producer files, loads them with `LoadLibrary`/`GetProcAddress`, and wraps the GenTL module hierarchy (System → Interface → Device → DataStream → Buffer).
 
 **GenAPI NodeMap** (`src/Bonsai.GenICam/GenApi/`) — Fetches the device XML via `GCReadPort`, parses it, and exposes named feature nodes. Supports the six node types covering ~95% of real-world devices: Integer, Float, String, Boolean, Enumeration, Command.
+
+## Project Structure
+
+```
+src/Bonsai.GenICam/
+├── Bonsai.GenICam.csproj
+│
+├── GenICamCapture.cs           # Source<IplImage> — streams frames
+├── EnumerateDevices.cs         # Source<DeviceInfo[]> — lists cameras
+├── GetFeatureNode.cs           # Source<FeatureValue> — reads a named feature
+├── SetFeatureNode.cs           # Combinator — writes a named feature + passthrough
+├── ListFeatureValues.cs        # Source<FeatureValue[]> — reads all readable features
+├── FeaturePropertyPage.cs      # Source<FeatureValue[]> — WinForms feature browser/editor
+├── GenICamXmlExtractor.cs      # Static helper — fetches raw GenICam XML from a device
+│
+├── DeviceInfo.cs               # Struct: index, vendor, model, serial, TL type
+├── FeatureValue.cs             # Discriminated union: int/double/string/bool/enum
+│
+├── GenTL/
+│   ├── GenTLLoader.cs          # Scans GENICAM_GENTL64_PATH, loads .cti files
+│   ├── GenTLApi.cs             # Delegate types + GetProcAddress binding per producer
+│   ├── GenTLTypes.cs           # GC_ERROR, handle typedefs, enums (BUFFER_INFO_CMD etc.)
+│   ├── GenTLSystem.cs          # TL_HANDLE wrapper — IDisposable, opens interfaces
+│   ├── GenTLInterface.cs       # IF_HANDLE wrapper — enumerates/opens devices
+│   ├── GenTLDevice.cs          # DEV_HANDLE wrapper — opens datastreams, exposes port
+│   ├── GenTLDataStream.cs      # DS_HANDLE — allocates buffers, starts/stops, fires events
+│   ├── GenTLException.cs       # GC_ERROR → GenTLException (message includes error name)
+│   └── NativeMethods.cs        # P/Invoke: LoadLibrary, GetProcAddress, FreeLibrary
+│
+└── GenApi/
+    ├── NodeMap.cs              # Fetches XML, builds node tree, read/write by name
+    └── NodeTypes.cs            # INode, IntegerNode, FloatNode, StringNode,
+                                #   BooleanNode, EnumerationNode, CommandNode
+```
+
+## Key Design Decisions
+
+### GenTL dynamic loading
+
+Cannot use `[DllImport]` because the `.cti` filename is unknown at compile time. Pattern:
+
+```csharp
+IntPtr hLib = NativeMethods.LoadLibrary(ctiPath);
+var pInit = NativeMethods.GetProcAddress(hLib, "GCInitLib");
+_GCInitLib = Marshal.GetDelegateForFunctionPointer<GCInitLibDelegate>(pInit);
+```
+
+`GenTLApi` holds one set of delegates per loaded producer. `GenTLLoader` selects the producer (first found in `GENICAM_GENTL64_PATH`, or a user-specified path).
+
+### Buffer acquisition loop
+
+`GenTLDataStream` allocates N buffers (`DSAllocAndAnnounceBuffer`), queues them, starts acquisition. A dedicated background thread waits on the new-buffer event (`EventGetData` on `EVENT_NEW_BUFFER`), copies pixel data into an `IplImage`, re-queues the buffer, and calls `observer.OnNext`. Thread is cancelled via `CancellationToken` on dispose.
+
+### IplImage construction
+
+Buffer metadata (width, height, pixel format) from `DSGetBufferInfo`. Pixel format mapped to `IplDepth`/channels:
+
+- `Mono8` → 8-bit 1ch
+- `BayerRG8/GB8/GR8/BG8` → 8-bit 1ch (demosaicing optional)
+- `RGB8/BGR8` → 8-bit 3ch
+- `Mono16` → 16-bit 1ch
+
+### GenAPI NodeMap
+
+1. `GCGetPortURL` → returns `"local:DeviceName.xml;address;length"` or `"file:..."` URL
+2. For `local:` scheme: `GCReadPort` at given address/length → raw XML bytes
+3. `XDocument.Parse` the XML → build `Dictionary<string, INode>`
+4. Node `pAddress` + `Length` + `AccessMode` from XML drives `GCReadPort`/`GCWritePort`
+5. `GetFeatureNode` / `SetFeatureNode` call `NodeMap.GetNode(name)` then cast to the appropriate node type
+
+### Operator signatures
+
+```csharp
+// Streams frames while subscribed; shares one camera connection per subscriber
+public class GenICamCapture : Source<IplImage>
+{
+    public string ProducerPath { get; set; }   // optional .cti override
+    public int DeviceIndex { get; set; }
+    public int NumBuffers { get; set; } = 4;
+    public int FrameTimeoutMs { get; set; } = 5000;
+}
+
+// Emits once on subscribe
+public class EnumerateDevices : Source<DeviceInfo[]>
+{
+    public string ProducerPath { get; set; }
+}
+
+// Reads a single named feature on subscribe
+public class GetFeatureNode : Source<FeatureValue>
+{
+    public string ProducerPath { get; set; }
+    public int DeviceIndex { get; set; }
+    public string FeatureName { get; set; }
+}
+
+// Writes a named feature on each upstream element, passes element through unchanged
+public class SetFeatureNode : Combinator
+{
+    public string ProducerPath { get; set; }
+    public int DeviceIndex { get; set; }
+    public string FeatureName { get; set; }
+    public string Value { get; set; }   // parsed to node type at runtime
+}
+
+// Reads all readable features as a single snapshot
+public class ListFeatureValues : Source<FeatureValue[]>
+{
+    public string ProducerPath { get; set; }
+    public int DeviceIndex { get; set; }
+}
+
+// Opens a WinForms property grid for interactive feature browsing/editing
+public class FeaturePropertyPage : Source<FeatureValue[]>
+{
+    public string ProducerPath { get; set; }
+    public int DeviceIndex { get; set; }
+}
+```
 
 ## License
 
