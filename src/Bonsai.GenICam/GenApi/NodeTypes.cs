@@ -4,7 +4,6 @@ using System.Collections.Generic;
 namespace Bonsai.GenICam.GenApi
 {
     internal enum NodeAccessMode { NI, NA, WO, RO, RW }
-    internal enum NodeVisibility { Beginner, Expert, Guru, Invisible }
 
     internal abstract class NodeBase
     {
@@ -80,11 +79,6 @@ namespace Bonsai.GenICam.GenApi
     {
         public string? PValue { get; set; }
         public long CommandValue { get; set; }
-    }
-
-    internal class EnumEntryNode : NodeBase
-    {
-        public long Value { get; set; }
     }
 
     internal class EnumerationNode : NodeBase

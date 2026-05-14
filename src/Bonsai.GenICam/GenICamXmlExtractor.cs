@@ -51,7 +51,7 @@ namespace Bonsai.GenICam
             }
         }
 
-        private static string FetchXml(GenTLApi api, IntPtr port)
+        internal static string FetchXml(GenTLApi api, IntPtr port)
         {
             string url = GenTLApi.FetchStringRef(delegate (byte[] buf, ref UIntPtr sz)
             {
@@ -71,7 +71,7 @@ namespace Bonsai.GenICam
                 var size = new UIntPtr((uint)length);
                 GenTLException.Check(api.GCReadPort(port, address, bytes, ref size));
 
-                return DecompressOrDecode(bytes, parts[0]);
+                return DecompressOrDecode(bytes, parts[0], url);
             }
             else if (url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
             {
@@ -83,7 +83,7 @@ namespace Bonsai.GenICam
             }
         }
 
-        private static ulong ParseHex(string s)
+        internal static ulong ParseHex(string s)
         {
             s = s.Trim();
             int q = s.IndexOf('?');
@@ -94,7 +94,7 @@ namespace Bonsai.GenICam
             return Convert.ToUInt64(s, 16);
         }
 
-        private static string DecompressOrDecode(byte[] bytes, string filename)
+        internal static string DecompressOrDecode(byte[] bytes, string filename, string url)
         {
             if ((bytes.Length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B) ||
                 filename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -103,7 +103,7 @@ namespace Bonsai.GenICam
                 using (var archive = new ZipArchive(ms, ZipArchiveMode.Read))
                 {
                     if (archive.Entries.Count == 0)
-                        throw new InvalidOperationException($"GenICam XML ZIP contains no entries.");
+                        throw new InvalidOperationException($"GenICam XML ZIP at '{url}' contains no entries.");
                     using (var reader = new StreamReader(archive.Entries[0].Open(), Encoding.UTF8, detectEncodingFromByteOrderMarks: false))
                         return reader.ReadToEnd();
                 }
