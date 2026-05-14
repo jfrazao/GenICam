@@ -23,3 +23,6 @@ packages/
 .bonsai/*.exe
 .bonsai/*.exe.*
 .bonsai/Settings/
+
+# Claude Code
+.claude/

@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell(dotnet build \"c:\\\\git\\\\jfrazao\\\\genicam\\\\Bonsai.GenICam.sln\" 2>&1)",
-      "PowerShell(& \"c:\\\\git\\\\jfrazao\\\\genicam\\\\src\\\\Bonsai.GenICam.TestApp\\\\bin\\\\Debug\\\\net472\\\\Bonsai.GenICam.TestApp.exe\" 2>&1)"
-    ]
-  }
-}
