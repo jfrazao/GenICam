@@ -24,7 +24,6 @@ A [Bonsai](https://bonsai-rx.org) package for acquiring images and reading/writi
 | `GetFeatureNode` | `Source<FeatureValue>` | Reads a named feature (e.g. `ExposureTime`) |
 | `SetFeatureNode` | `Combinator` | Writes a named feature on each upstream element |
 | `ListFeatureValues` | `Source<FeatureValue[]>` | Reads all readable features from a device |
-| `FeaturePropertyPage` | `Source<FeatureValue[]>` | Interactive WinForms grid for browsing and editing features |
 
 ### Using in Bonsai
 
@@ -186,7 +185,7 @@ src/Bonsai.GenICam/
 ├── GetFeatureNode.cs           # Source<FeatureValue> — reads a named feature
 ├── SetFeatureNode.cs           # Combinator — writes a named feature + passthrough
 ├── ListFeatureValues.cs        # Source<FeatureValue[]> — reads all readable features
-├── FeaturePropertyPage.cs      # Source<FeatureValue[]> — WinForms feature browser/editor
+├── FeatureConfiguration.cs     # FeatureOverride list, editor form, UITypeEditors
 ├── GenICamXmlExtractor.cs      # Static helper — fetches raw GenICam XML from a device
 │
 ├── DeviceInfo.cs               # Struct: index, vendor, model, serial, TL type
@@ -284,13 +283,6 @@ public class SetFeatureNode : Combinator
 
 // Reads all readable features as a single snapshot
 public class ListFeatureValues : Source<FeatureValue[]>
-{
-    public string ProducerPath { get; set; }
-    public int DeviceIndex { get; set; }
-}
-
-// Opens a WinForms property grid for interactive feature browsing/editing
-public class FeaturePropertyPage : Source<FeatureValue[]>
 {
     public string ProducerPath { get; set; }
     public int DeviceIndex { get; set; }
