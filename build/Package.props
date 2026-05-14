@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <PackageTags>Bonsai Rx GenICam GenTL Vision Camera</PackageTags>
+    <PackageProjectUrl>https://github.com/bonsai-rx/genicam</PackageProjectUrl>
+    <Authors>Bonsai Foundation</Authors>
+    <Copyright>Copyright © Bonsai Foundation CIC and Contributors</Copyright>
+  </PropertyGroup>
+</Project>

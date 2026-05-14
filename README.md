@@ -61,7 +61,7 @@ dotnet build src/Bonsai.GenICam.TestApp/Bonsai.GenICam.TestApp.csproj -c Release
 
 ```powershell
 # From the project root:
-.\src\Bonsai.GenICam.TestApp\bin\Release\net472\win-x64\Bonsai.GenICam.TestApp.exe [device-index]
+.\artifacts\bin\Bonsai.GenICam.TestApp\release_win-x64\Bonsai.GenICam.TestApp.exe [device-index]
 ```
 
 `device-index` selects which camera to use for feature listing and frame capture (defaults to `1`).
@@ -130,6 +130,16 @@ Two implementation layers:
 ## Project Structure
 
 ```
+build/                              # Shared MSBuild configuration
+├── Package.props                   # NuGet author, copyright, tags
+├── Common.csproj.props             # LangVersion, Nullable, UseArtifactsOutput
+├── Common.csproj.targets           # Versioning, package content (icon, license, readme)
+└── icon.png                        # Bonsai Foundation package icon
+
+Directory.Build.props               # Auto-imports build/ props for all projects
+Directory.Build.targets             # Auto-imports build/ targets for all projects
+global.json                         # Pins .NET SDK version
+
 src/Bonsai.GenICam/
 ├── Bonsai.GenICam.csproj
 │

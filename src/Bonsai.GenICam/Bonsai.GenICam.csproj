@@ -1,11 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <Title>Bonsai - GenICam</Title>
+    <Description>Bonsai library for acquiring images and reading/writing features from any GenICam/GenTL-compliant camera without a proprietary SDK.</Description>
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>Bonsai.GenICam</AssemblyName>
     <RootNamespace>Bonsai.GenICam</RootNamespace>
-    <LangVersion>7.3</LangVersion>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>

@@ -12,7 +12,7 @@ namespace Bonsai.GenICam
     {
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
-        public string ProducerPath { get; set; }
+        public string? ProducerPath { get; set; }
 
         [Description("Zero-based index of the camera in the enumerated device list.")]
         public int DeviceIndex { get; set; }
