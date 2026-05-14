@@ -140,8 +140,8 @@ All readable features of device 1:
   ...
 
 Capturing 5 frames from device 1...
-  Frame 1: 1920x1200  depth=IPL_DEPTH_8U  ch=1
-  Frame 2: 1920x1200  depth=IPL_DEPTH_8U  ch=1
+  Frame 1: 1920x1200  depth=U8  ch=1
+  Frame 2: 1920x1200  depth=U8  ch=1
   ...
   Done — 5 frame(s) received.
 ```
