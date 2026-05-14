@@ -56,11 +56,30 @@ At workflow start, the device is selected in this order:
 
 #### Feature overrides
 
-The `Features` property stores a flat list of `(Name, Value)` pairs serialized in the `.bonsai` file.
+The `Features` property stores a flat list of named feature values. Open the editor by clicking `...` on the property.
 
-- Changes made in the feature editor are written to the camera **immediately** — directly to the live node map while the workflow is running, or via a temporary design-time connection when it is not
-- At workflow start, overrides are applied after the device opens successfully; if the camera cannot be matched (serial or model not found), the error is thrown during device selection and the override list is never reached
-- The list is persisted by Bonsai's normal **Save workflow** action
+**Storage** — serialized as `<Feature>` elements inside the workflow `.bonsai` file:
+
+```xml
+<Features>
+  <Feature name="ExposureTime" value="10000" />
+  <Feature name="Gain" value="0" />
+</Features>
+```
+
+Persisted by Bonsai's normal **Save workflow** (Ctrl+S).
+
+**In the editor**
+
+- The grid shows all readable features with their current live values. The **Startup** column (checkbox) marks which features are in the override list.
+- **Writing a value while connected** — written immediately to the camera (live node map if the workflow is running, design-time connection if not). The value read back from the camera after the write is stored in the override list and the Startup checkbox is ticked automatically. If the camera rejects the write, an error dialog is shown and the override list is not updated.
+- **Toggling the Startup checkbox** — adds or removes the feature from the override list without writing to the camera. Useful for including a value that is already set on the camera.
+- **Editor opened when the camera is not reachable** — shows the stored override list only (no live values). Any value typed goes straight into the list without a hardware round-trip, so no write errors can occur.
+
+**At workflow start**
+
+1. The device is opened (using `SerialNumber`, `CameraModel`, or `DeviceIndex` — see priority above). If the device cannot be found, an error is thrown and no overrides are applied.
+2. Each override is written to the camera in list order. Individual write failures are silently skipped (best-effort); the workflow starts regardless.
 
 **GetFeatureNode / SetFeatureNode**
 - `FeatureName` — GenICam XML feature name, e.g. `ExposureTime`, `Gain`, `AcquisitionFrameRate`
