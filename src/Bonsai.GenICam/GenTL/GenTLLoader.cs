@@ -42,7 +42,7 @@ namespace Bonsai.GenICam.GenTL
 
         // Load and initialize a GenTL producer. If ctiPath is null, uses the first producer
         // found on the system search path.
-        internal static GenTLApi Load(string ctiPath = null)
+        internal static GenTLApi Load(string? ctiPath = null)
         {
             if (ctiPath != null)
                 return new GenTLApi(ctiPath);
@@ -59,7 +59,7 @@ namespace Bonsai.GenICam.GenTL
         // avoiding a double-load race. When explicitProducerPath is set uses only that producer.
         // Caller owns the returned GenTLApi and must dispose it.
         // Serialized via _scanLock so concurrent workflow starts don't race on GCInitLib/GCCloseLib.
-        internal static (GenTLApi api, int localIndex) ResolveAndLoad(string explicitProducerPath, int globalDeviceIndex)
+        internal static (GenTLApi api, int localIndex) ResolveAndLoad(string? explicitProducerPath, int globalDeviceIndex)
         {
             if (explicitProducerPath != null)
                 return (Load(explicitProducerPath), globalDeviceIndex);
@@ -69,7 +69,7 @@ namespace Bonsai.GenICam.GenTL
                 int offset = 0;
                 foreach (string ctiPath in FindProducers())
                 {
-                    GenTLApi api = null;
+                    GenTLApi? api = null;
                     try
                     {
                         api = new GenTLApi(ctiPath);

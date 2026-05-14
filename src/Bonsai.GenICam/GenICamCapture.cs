@@ -16,7 +16,7 @@ namespace Bonsai.GenICam
     {
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
-        public string ProducerPath { get; set; }
+        public string? ProducerPath { get; set; }
 
         [Description("Zero-based index of the camera in the enumerated device list.")]
         public int DeviceIndex { get; set; }
@@ -130,7 +130,7 @@ namespace Bonsai.GenICam
             try
             {
                 object v = nodeMap.Read("PixelFormat").Value;
-                return PixelFormatNameToCode(v is string s ? s : v.ToString());
+                return PixelFormatNameToCode(v is string s ? s : v?.ToString() ?? string.Empty);
             }
             catch { return 0; }
         }
@@ -155,13 +155,13 @@ namespace Bonsai.GenICam
 
         private sealed class CaptureState
         {
-            public IObserver<IplImage> Observer;
-            public string ProducerPath;
+            public IObserver<IplImage> Observer = null!;
+            public string? ProducerPath;
             public int DeviceIndex;
             public int NumBuffers;
             public uint FrameTimeoutMs;
-            public CancellationTokenSource Cancel;
-            public volatile GenTLDataStream Stream; // set by capture thread, read by dispose
+            public CancellationTokenSource Cancel = null!;
+            public volatile GenTLDataStream? Stream; // set by capture thread, read by dispose
         }
     }
 }

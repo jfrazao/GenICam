@@ -19,7 +19,7 @@ namespace Bonsai.GenICam
     {
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
-        public string ProducerPath { get; set; }
+        public string? ProducerPath { get; set; }
 
         [Description("Zero-based index of the camera in the enumerated device list.")]
         public int DeviceIndex { get; set; }
@@ -185,19 +185,19 @@ namespace Bonsai.GenICam
     public class FeatureEntry
     {
         public string Name { get; set; }
-        public object CurrentValue { get; set; }
-        public string EditValue { get; set; }
+        public object? CurrentValue { get; set; }
+        public string? EditValue { get; set; }
         public bool Writable { get; set; }
         public bool Modified { get; set; }
-        public string Category { get; set; }
-        public string Description { get; set; }
+        public string? Category { get; set; }
+        public string? Description { get; set; }
         internal FeatureKind Kind { get; set; }
-        internal IReadOnlyList<string> EnumEntries { get; set; }
+        internal IReadOnlyList<string>? EnumEntries { get; set; }
         internal double? MinValue { get; set; }
         internal double? MaxValue { get; set; }
         internal double? StepValue { get; set; }
 
-        public FeatureEntry(string name, object value, bool writable)
+        public FeatureEntry(string name, object? value, bool writable)
         {
             Name = name;
             CurrentValue = value;
@@ -206,7 +206,7 @@ namespace Bonsai.GenICam
             Modified = false;
         }
 
-        public override string ToString() => EditValue ?? CurrentValue?.ToString();
+        public override string ToString() => EditValue ?? CurrentValue?.ToString() ?? string.Empty;
     }
 
     internal class FeatureConfigurationEditor : UITypeEditor
@@ -250,17 +250,17 @@ namespace Bonsai.GenICam
         private readonly Panel overlayNumericPanel;
         private readonly NumericUpDown overlayNumeric;
         private readonly TrackBar overlayTrackBar;
-        private readonly string producerPath;
+        private readonly string? producerPath;
         private bool _suppressSync;
         private readonly int deviceIndex;
-        private string _selectedCategory;
-        private FeatureEntry _overlayEntry;
+        private string? _selectedCategory;
+        private FeatureEntry? _overlayEntry;
         private int _overlayRowIndex = -1;
         private int _valueColumnIndex;
 
         public FeatureConfiguration Configuration { get; }
 
-        public FeatureConfigurationForm(FeatureConfiguration configuration, string producerPath, int deviceIndex)
+        public FeatureConfigurationForm(FeatureConfiguration configuration, string? producerPath, int deviceIndex)
         {
             Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             this.producerPath = producerPath;
@@ -337,12 +337,12 @@ namespace Bonsai.GenICam
             {
                 if (e2.KeyCode == Keys.Enter)
                 {
-                    CommitNumericValue(); overlayNumericPanel.Visible = false;
+                    CommitNumericValue(); overlayNumericPanel!.Visible = false;
                     _overlayEntry = null; _overlayRowIndex = -1; grid.Focus(); e2.Handled = true;
                 }
                 else if (e2.KeyCode == Keys.Escape)
                 {
-                    _overlayEntry = null; overlayNumericPanel.Visible = false;
+                    _overlayEntry = null; overlayNumericPanel!.Visible = false;
                     _overlayRowIndex = -1; grid.Focus(); e2.Handled = true;
                 }
             };
@@ -358,7 +358,7 @@ namespace Bonsai.GenICam
             {
                 if (e2.KeyCode == Keys.Escape)
                 {
-                    _overlayEntry = null; overlayNumericPanel.Visible = false;
+                    _overlayEntry = null; overlayNumericPanel!.Visible = false;
                     _overlayRowIndex = -1; grid.Focus(); e2.Handled = true;
                 }
             };
@@ -582,12 +582,12 @@ namespace Bonsai.GenICam
             categoryList.SelectedIndexChanged -= CategoryList_SelectedIndexChanged;
             try
             {
-                string savedCategory = _selectedCategory;
+                string? savedCategory = _selectedCategory;
                 categoryList.Items.Clear();
                 categoryList.Items.Add("All");
                 var cats = Configuration.Entries
                     .Where(e => e.Category != null)
-                    .Select(e => e.Category)
+                    .Select(e => e.Category!)
                     .Distinct()
                     .OrderBy(c => c);
                 foreach (string cat in cats)
@@ -716,8 +716,8 @@ namespace Bonsai.GenICam
             int panelH = bounds.Height;
             if (hasLimits)
             {
-                double range = entry.MaxValue.Value - entry.MinValue.Value;
-                int tick = range > 0 ? (int)(((double)overlayNumeric.Value - entry.MinValue.Value) / range * 1000) : 0;
+                double range = entry.MaxValue.GetValueOrDefault() - entry.MinValue.GetValueOrDefault();
+                int tick = range > 0 ? (int)(((double)overlayNumeric.Value - entry.MinValue.GetValueOrDefault()) / range * 1000) : 0;
                 _suppressSync = true;
                 overlayTrackBar.Value = Math.Max(0, Math.Min(1000, tick));
                 _suppressSync = false;
@@ -740,7 +740,7 @@ namespace Bonsai.GenICam
         private void HideOverlays()
         {
             if (overlayCombo.Visible)        { CommitComboValue();   overlayCombo.Visible        = false; }
-            if (overlayNumericPanel.Visible) { CommitNumericValue(); overlayNumericPanel.Visible = false; }
+            if (overlayNumericPanel.Visible) { CommitNumericValue(); overlayNumericPanel!.Visible = false; }
             _overlayEntry = null;
             _overlayRowIndex = -1;
         }
@@ -786,7 +786,7 @@ namespace Bonsai.GenICam
                 if (overlayNumericPanel.Visible && !overlayNumericPanel.ContainsFocus)
                 {
                     CommitNumericValue();
-                    overlayNumericPanel.Visible = false;
+                    overlayNumericPanel!.Visible = false;
                     _overlayEntry = null;
                     _overlayRowIndex = -1;
                 }

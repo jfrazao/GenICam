@@ -12,16 +12,16 @@ namespace Bonsai.GenICam
     {
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
-        public string ProducerPath { get; set; }
+        public string? ProducerPath { get; set; }
 
         [Description("Zero-based index of the camera in the enumerated device list.")]
         public int DeviceIndex { get; set; }
 
         [Description("Name of the GenICam feature node to write (e.g. ExposureTime, Gain).")]
-        public string FeatureName { get; set; }
+        public string? FeatureName { get; set; }
 
         [Description("Value to write. Strings are accepted for all node types and coerced at runtime.")]
-        public string Value { get; set; }
+        public string? Value { get; set; }
 
         public override IObservable<TSource> Process<TSource>(IObservable<TSource> source)
         {
@@ -30,7 +30,7 @@ namespace Bonsai.GenICam
                 ctx =>
                 {
                     var map = new NodeMap(ctx.Api, ctx.Port);
-                    return source.Do(_ => map.Write(FeatureName, Value));
+                    return source.Do(_ => map.Write(FeatureName!, Value ?? string.Empty));
                 });
         }
 

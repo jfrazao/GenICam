@@ -12,13 +12,13 @@ namespace Bonsai.GenICam
     {
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
-        public string ProducerPath { get; set; }
+        public string? ProducerPath { get; set; }
 
         [Description("Zero-based index of the camera in the enumerated device list.")]
         public int DeviceIndex { get; set; }
 
         [Description("Name of the GenICam feature node to read (e.g. ExposureTime, Gain).")]
-        public string FeatureName { get; set; }
+        public string? FeatureName { get; set; }
 
         [Description("Interval between reads in milliseconds. Use 0 to emit a single value and complete.")]
         public double PeriodMs { get; set; } = 1000;
@@ -31,9 +31,9 @@ namespace Bonsai.GenICam
                 {
                     var map = new NodeMap(ctx.Api, ctx.Port);
                     if (PeriodMs <= 0)
-                        return Observable.Return(map.Read(FeatureName));
+                        return Observable.Return(map.Read(FeatureName!));
                     return Observable.Interval(TimeSpan.FromMilliseconds(PeriodMs))
-                        .Select(_ => map.Read(FeatureName));
+                        .Select(_ => map.Read(FeatureName!));
                 });
         }
 

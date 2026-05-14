@@ -153,7 +153,7 @@ namespace Bonsai.GenICam.GenTL
         public IFGetDeviceIDDelegate IFGetDeviceID;
         public IFUpdateDeviceListDelegate IFUpdateDeviceList;
         public IFOpenDeviceDelegate IFOpenDevice;
-        public IFGetDeviceInfoDelegate IFGetDeviceInfo; // null if producer predates GenTL 1.3
+        public IFGetDeviceInfoDelegate? IFGetDeviceInfo; // null if producer predates GenTL 1.3
         public DevCloseDelegate DevClose;
         public DevGetPortDelegate DevGetPort;
         public DevGetNumDataStreamsDelegate DevGetNumDataStreams;
@@ -272,7 +272,7 @@ namespace Bonsai.GenICam.GenTL
             return Marshal.GetDelegateForFunctionPointer<T>(ptr);
         }
 
-        private T BindOptional<T>(string name) where T : Delegate
+        private T? BindOptional<T>(string name) where T : class, Delegate
         {
             var ptr = NativeMethods.GetProcAddress(_module, name);
             return ptr == IntPtr.Zero ? null : Marshal.GetDelegateForFunctionPointer<T>(ptr);

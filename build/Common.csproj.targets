@@ -1,0 +1,14 @@
+<Project>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(CiBuildVersion)' == ''">
+    <DevVersion Condition="'$(DevVersion)' == ''">0</DevVersion>
+    <Version>42.42.42-dev$(DevVersion)</Version>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(CiBuildVersion)' != ''">
+    <Version>$(CiBuildVersion)</Version>
+  </PropertyGroup>
+</Project>

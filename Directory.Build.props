@@ -1,0 +1,4 @@
+<Project>
+  <Import Project="build/Package.props" />
+  <Import Project="build/Common.csproj.props" />
+</Project>
