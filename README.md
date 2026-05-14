@@ -39,12 +39,28 @@ A [Bonsai](https://bonsai-rx.org) package for acquiring images and reading/writi
 
 **GenICamCapture**
 - `ProducerPath` — optional path to a specific `.cti` file (leave blank to use `GENICAM_GENTL64_PATH`)
-- `DeviceIndex` — zero-based camera index in the enumerated list; when `CameraModel` is set, counts only within cameras of that model (default `0`)
-- `CameraModel` — optional vendor+model string, e.g. `Basler Blackfly S BFS-U3-16S2M`; click the dropdown to pick from detected cameras. Stored in the workflow. When set, the correct camera is selected by model name (and `DeviceIndex` within that model) rather than by global index, so the workflow still works correctly if cameras are enumerated in a different order across sessions.
-- `SerialNumber` — optional serial number; click the dropdown to pick from detected cameras. When set, the camera is found by serial regardless of `CameraModel` or `DeviceIndex`. A mismatch at startup causes an error. Storing this is the safest way to pin a workflow to a specific physical camera.
+- `DeviceIndex` — zero-based camera index; when `CameraModel` is set, counts only within the cameras matching that model (default `0`)
+- `CameraModel` — optional vendor+model string (e.g. `Basler Blackfly S BFS-U3-16S2M`); click the dropdown to pick from all detected cameras. Enumerated on-demand when the dropdown opens. When set, camera selection at runtime uses model name + `DeviceIndex` rather than global index.
+- `SerialNumber` — optional serial number; click the dropdown to pick from all detected cameras. When set, takes priority over `CameraModel` and `DeviceIndex`. A mismatch at startup causes an error — use this to pin a workflow to one specific physical camera.
 - `NumBuffers` — acquisition buffer count (default `4`)
 - `FrameTimeoutMs` — per-frame timeout in ms (default `5000`)
-- `Features` — camera feature overrides applied at startup (click `...` to open the feature editor)
+- `Features` — list of feature overrides applied at startup; click `...` to open the feature editor
+
+#### Camera selection priority
+
+At workflow start, the device is selected in this order:
+
+1. **SerialNumber set** — search all producers (or the configured `ProducerPath`) for that exact serial; error if not found
+2. **CameraModel set** — search producers, filter by `"Vendor Model"` string, pick by `DeviceIndex` within the matching set; error if no match or index out of range
+3. **Neither** — global `DeviceIndex` across all producers (the default behaviour)
+
+#### Feature overrides
+
+The `Features` property stores a flat list of `(Name, Value)` pairs serialized in the `.bonsai` file.
+
+- Changes made in the feature editor are written to the camera **immediately** — directly to the live node map while the workflow is running, or via a temporary design-time connection when it is not
+- At workflow start, overrides are applied after the device opens successfully; if the camera cannot be matched (serial or model not found), the error is thrown during device selection and the override list is never reached
+- The list is persisted by Bonsai's normal **Save workflow** action
 
 **GetFeatureNode / SetFeatureNode**
 - `FeatureName` — GenICam XML feature name, e.g. `ExposureTime`, `Gain`, `AcquisitionFrameRate`
