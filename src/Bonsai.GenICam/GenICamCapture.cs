@@ -5,6 +5,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Runtime.ExceptionServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Bonsai;
 using Bonsai.GenICam.GenApi;
 using Bonsai.GenICam.GenTL;
@@ -13,14 +14,28 @@ using OpenCV.Net;
 namespace Bonsai.GenICam
 {
     [Description("Acquires a sequence of images from a GenICam GenTL camera.")]
-    public class GenICamCapture : Source<IplImage>, IGenICamSource
+    public class GenICamCapture : Source<IplImage>, IGenICamSource, INotifyPropertyChanged
     {
+        private string? _producerPath;
+        private int _deviceIndex;
+        private CancellationTokenSource? _designRefreshCts;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
-        public string? ProducerPath { get; set; }
+        public string? ProducerPath
+        {
+            get => _producerPath;
+            set { if (_producerPath == value) return; _producerPath = value; ScheduleDesignTimeRefresh(); }
+        }
 
         [Description("Zero-based index of the camera in the enumerated device list.")]
-        public int DeviceIndex { get; set; }
+        public int DeviceIndex
+        {
+            get => _deviceIndex;
+            set { if (_deviceIndex == value) return; _deviceIndex = value; ScheduleDesignTimeRefresh(); }
+        }
 
         [Description("Number of acquisition buffers to allocate.")]
         public int NumBuffers { get; set; } = 4;
@@ -32,6 +47,40 @@ namespace Bonsai.GenICam
         [TypeConverter(typeof(ExpandableObjectConverter))]
         [Editor(typeof(FeatureConfigurationEditor), typeof(UITypeEditor))]
         public FeatureConfiguration Features { get; set; } = new FeatureConfiguration();
+
+        private void ScheduleDesignTimeRefresh()
+        {
+            _designRefreshCts?.Cancel();
+            _designRefreshCts = new CancellationTokenSource();
+            var ct = _designRefreshCts.Token;
+            var path = string.IsNullOrWhiteSpace(_producerPath) ? null : _producerPath;
+            var index = _deviceIndex;
+            var features = Features;
+            var ctx = SynchronizationContext.Current;
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(500, ct);
+                    var (api, localIndex) = GenTLLoader.ResolveAndLoad(path, index);
+                    using (var system = new GenTLSystem(api))
+                    {
+                        var (_, _, iface, device) = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.ReadOnly);
+                        using (iface)
+                        using (device)
+                        {
+                            var map = new NodeMap(api, device.GetPort());
+                            features.Refresh(map);
+                        }
+                    }
+                    void notify() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Features)));
+                    if (ctx != null) ctx.Post(_ => notify(), null);
+                    else notify();
+                }
+                catch { }
+            });
+        }
 
         public override IObservable<IplImage> Generate()
         {

@@ -4,79 +4,18 @@ using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.Drawing.Design;
 using System.Linq;
-using System.Reactive.Linq;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Windows.Forms.VisualStyles;
-using Bonsai;
 using Bonsai.GenICam.GenApi;
 using Bonsai.GenICam.GenTL;
 
 namespace Bonsai.GenICam
 {
-    [Description("Displays all camera feature values in a property editor and applies edits back to the device.")]
-    public class FeaturePropertyPage : Source<FeatureValue[]>
+    internal interface IGenICamSource
     {
-        [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
-        [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
-        public string? ProducerPath { get; set; }
-
-        [Description("Zero-based index of the camera in the enumerated device list.")]
-        public int DeviceIndex { get; set; }
-
-        [Description("Inspect and modify the currently loaded camera features.")]
-        [TypeConverter(typeof(ExpandableObjectConverter))]
-        [Editor(typeof(FeatureConfigurationEditor), typeof(UITypeEditor))]
-        public FeatureConfiguration Features { get; set; } = new FeatureConfiguration();
-
-        public override IObservable<FeatureValue[]> Generate()
-        {
-            return Observable.Using(
-                () => OpenDevice(),
-                ctx =>
-                {
-                    var map = new NodeMap(ctx.Api, ctx.Port);
-                    Features.Refresh(map);
-                    Features.Apply(map);
-                    var features = new List<FeatureValue>(map.TryReadAll());
-                    return Observable.Return(features.ToArray());
-                });
-        }
-
-        private DeviceContext OpenDevice()
-        {
-            var (api, localIndex) = GenTLLoader.ResolveAndLoad(
-                string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath, DeviceIndex);
-            var system = new GenTLSystem(api);
-            var (_, _, iface, device) = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.ReadOnly);
-            return new DeviceContext(api, system, iface, device);
-        }
-
-        private sealed class DeviceContext : IDisposable
-        {
-            internal readonly GenTLApi Api;
-            internal readonly IntPtr Port;
-            private readonly GenTLSystem _system;
-            private readonly GenTLInterface _iface;
-            private readonly GenTLDevice _device;
-
-            internal DeviceContext(GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device)
-            {
-                Api = api;
-                _system = system;
-                _iface = iface;
-                _device = device;
-                Port = device.GetPort();
-            }
-
-            public void Dispose()
-            {
-                _device.Dispose();
-                _iface.Dispose();
-                _system.Dispose();
-                Api.Dispose();
-            }
-        }
+        string? ProducerPath { get; }
+        int DeviceIndex { get; }
     }
 
     internal enum FeatureKind { Text, Integer, Float, Enumeration, Boolean, Command }
@@ -218,7 +157,7 @@ namespace Bonsai.GenICam
 
         public override object EditValue(ITypeDescriptorContext context, IServiceProvider provider, object value)
         {
-            if (context?.Instance is FeaturePropertyPage node)
+            if (context?.Instance is IGenICamSource node)
             {
                 var configuration = value as FeatureConfiguration ?? new FeatureConfiguration();
                 using (var form = new FeatureConfigurationForm(configuration, node.ProducerPath, node.DeviceIndex))
@@ -561,8 +500,16 @@ namespace Bonsai.GenICam
             }
             catch (Exception ex)
             {
-                deviceInfoLabel.Text = "No device connected";
-                MessageBox.Show(this, $"Failed to refresh camera features:\n{ex.Message}", "Feature Editor", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                deviceInfoLabel.Text = $"Device unavailable — showing saved configuration ({ex.Message})";
+                // If we have cached entries show them without a blocking dialog.
+                // Only pop a dialog when the editor opens with nothing cached at all.
+                if (Configuration.Entries.Count == 0)
+                    MessageBox.Show(this, $"Cannot connect to camera:\n{ex.Message}\n\nStop the running workflow before opening the feature editor.", "Feature Editor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                else
+                {
+                    UpdateCategoryList();
+                    UpdateGrid();
+                }
             }
         }
 
