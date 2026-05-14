@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Drawing.Design;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Runtime.ExceptionServices;
@@ -12,7 +13,7 @@ using OpenCV.Net;
 namespace Bonsai.GenICam
 {
     [Description("Acquires a sequence of images from a GenICam GenTL camera.")]
-    public class GenICamCapture : Source<IplImage>
+    public class GenICamCapture : Source<IplImage>, IGenICamSource
     {
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
@@ -27,6 +28,11 @@ namespace Bonsai.GenICam
         [Description("Timeout in milliseconds to wait for each frame.")]
         public uint FrameTimeoutMs { get; set; } = 5000;
 
+        [Description("Camera feature values to apply before acquisition starts.")]
+        [TypeConverter(typeof(ExpandableObjectConverter))]
+        [Editor(typeof(FeatureConfigurationEditor), typeof(UITypeEditor))]
+        public FeatureConfiguration Features { get; set; } = new FeatureConfiguration();
+
         public override IObservable<IplImage> Generate()
         {
             return Observable.Create<IplImage>(observer =>
@@ -38,6 +44,7 @@ namespace Bonsai.GenICam
                     DeviceIndex = DeviceIndex,
                     NumBuffers = NumBuffers,
                     FrameTimeoutMs = FrameTimeoutMs,
+                    Features = Features,
                     Cancel = new CancellationTokenSource()
                 };
 
@@ -75,6 +82,7 @@ namespace Bonsai.GenICam
                     {
                         step = "fetch device XML / build NodeMap";
                         var nodeMap = new NodeMap(api, device.GetPort());
+                        s.Features.Apply(nodeMap);
                         step = "open data stream";
                         using (var stream = device.OpenDataStream())
                         {
@@ -160,6 +168,7 @@ namespace Bonsai.GenICam
             public int DeviceIndex;
             public int NumBuffers;
             public uint FrameTimeoutMs;
+            public FeatureConfiguration Features = null!;
             public CancellationTokenSource Cancel = null!;
             public volatile GenTLDataStream? Stream; // set by capture thread, read by dispose
         }
