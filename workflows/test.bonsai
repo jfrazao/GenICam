@@ -30,14 +30,6 @@
       </Expression>
       <Expression xsi:type="Disable">
         <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:FeaturePropertyPage">
-            <p1:DeviceIndex>0</p1:DeviceIndex>
-            <p1:Features />
-          </Combinator>
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
           <Combinator xsi:type="p1:EnumerateDevices" />
         </Builder>
       </Expression>
@@ -53,28 +45,19 @@
       </Expression>
       <Expression xsi:type="Combinator">
         <Combinator xsi:type="p1:GenICamCapture">
-          <p1:ProducerPath />
           <p1:DeviceIndex>0</p1:DeviceIndex>
+          <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
           <p1:NumBuffers>4</p1:NumBuffers>
           <p1:FrameTimeoutMs>5000</p1:FrameTimeoutMs>
+          <p1:Features />
         </Combinator>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:GenICamCapture">
-            <p1:ProducerPath />
-            <p1:DeviceIndex>1</p1:DeviceIndex>
-            <p1:NumBuffers>4</p1:NumBuffers>
-            <p1:FrameTimeoutMs>5000</p1:FrameTimeoutMs>
-          </Combinator>
-        </Builder>
       </Expression>
     </Nodes>
     <Edges>
       <Edge From="1" To="2" Label="Source1" />
       <Edge From="2" To="3" Label="Source1" />
+      <Edge From="4" To="5" Label="Source1" />
       <Edge From="5" To="6" Label="Source1" />
-      <Edge From="6" To="7" Label="Source1" />
     </Edges>
   </Workflow>
 </WorkflowBuilder>

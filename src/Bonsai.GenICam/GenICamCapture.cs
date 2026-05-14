@@ -1,11 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing.Design;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Runtime.ExceptionServices;
 using System.Threading;
-using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.Windows.Forms.Design;
 using Bonsai;
 using Bonsai.GenICam.GenApi;
 using Bonsai.GenICam.GenTL;
@@ -18,7 +20,11 @@ namespace Bonsai.GenICam
     {
         private string? _producerPath;
         private int _deviceIndex;
-        private CancellationTokenSource? _designRefreshCts;
+        private string? _cameraModel;
+        private string? _serialNumber;
+        private volatile NodeMap? _liveNodeMap;
+
+        NodeMap? IGenICamSource.LiveNodeMap => _liveNodeMap;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -27,14 +33,42 @@ namespace Bonsai.GenICam
         public string? ProducerPath
         {
             get => _producerPath;
-            set { if (_producerPath == value) return; _producerPath = value; ScheduleDesignTimeRefresh(); }
+            set { if (_producerPath == value) return; _producerPath = value; NotifyIdentityChanged(); }
         }
 
-        [Description("Zero-based index of the camera in the enumerated device list.")]
+        [Description("Zero-based index of the camera in the enumerated device list, or within the matching model group when CameraModel is set.")]
         public int DeviceIndex
         {
             get => _deviceIndex;
-            set { if (_deviceIndex == value) return; _deviceIndex = value; ScheduleDesignTimeRefresh(); }
+            set { if (_deviceIndex == value) return; _deviceIndex = value; NotifyIdentityChanged(); }
+        }
+
+        [Description("Optional: select camera by vendor+model string (e.g. 'Basler Blackfly S BFS-U3-16S2M'). Leave empty to select by DeviceIndex only.")]
+        [Editor(typeof(CameraModelEditor), typeof(UITypeEditor))]
+        public string? CameraModel
+        {
+            get => _cameraModel;
+            set
+            {
+                var v = string.IsNullOrWhiteSpace(value) ? null : value;
+                if (_cameraModel == v) return;
+                _cameraModel = v;
+                NotifyIdentityChanged();
+            }
+        }
+
+        [Description("Optional: select camera by serial number. When set, overrides CameraModel and DeviceIndex for device lookup; a mismatch causes an error at startup.")]
+        [Editor(typeof(SerialNumberEditor), typeof(UITypeEditor))]
+        public string? SerialNumber
+        {
+            get => _serialNumber;
+            set
+            {
+                var v = string.IsNullOrWhiteSpace(value) ? null : value;
+                if (_serialNumber == v) return;
+                _serialNumber = v;
+                NotifyIdentityChanged();
+            }
         }
 
         [Description("Number of acquisition buffers to allocate.")]
@@ -48,38 +82,9 @@ namespace Bonsai.GenICam
         [Editor(typeof(FeatureConfigurationEditor), typeof(UITypeEditor))]
         public FeatureConfiguration Features { get; set; } = new FeatureConfiguration();
 
-        private void ScheduleDesignTimeRefresh()
+        private void NotifyIdentityChanged()
         {
-            _designRefreshCts?.Cancel();
-            _designRefreshCts = new CancellationTokenSource();
-            var ct = _designRefreshCts.Token;
-            var path = string.IsNullOrWhiteSpace(_producerPath) ? null : _producerPath;
-            var index = _deviceIndex;
-            var features = Features;
-            var ctx = SynchronizationContext.Current;
-
-            Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(500, ct);
-                    var (api, localIndex) = GenTLLoader.ResolveAndLoad(path, index);
-                    using (var system = new GenTLSystem(api))
-                    {
-                        var (_, _, iface, device) = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.ReadOnly);
-                        using (iface)
-                        using (device)
-                        {
-                            var map = new NodeMap(api, device.GetPort());
-                            features.Refresh(map);
-                        }
-                    }
-                    void notify() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Features)));
-                    if (ctx != null) ctx.Post(_ => notify(), null);
-                    else notify();
-                }
-                catch { }
-            });
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Features)));
         }
 
         public override IObservable<IplImage> Generate()
@@ -91,10 +96,13 @@ namespace Bonsai.GenICam
                     Observer = observer,
                     ProducerPath = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath,
                     DeviceIndex = DeviceIndex,
+                    CameraModel = string.IsNullOrWhiteSpace(CameraModel) ? null : CameraModel,
+                    SerialNumber = string.IsNullOrWhiteSpace(SerialNumber) ? null : SerialNumber,
                     NumBuffers = NumBuffers,
                     FrameTimeoutMs = FrameTimeoutMs,
                     Features = Features,
-                    Cancel = new CancellationTokenSource()
+                    Cancel = new CancellationTokenSource(),
+                    SetLiveNodeMap = map => _liveNodeMap = map
                 };
 
                 var thread = new Thread(RunCapture);
@@ -105,7 +113,7 @@ namespace Bonsai.GenICam
                 return Disposable.Create(() =>
                 {
                     state.Cancel.Cancel();
-                    state.Stream?.InterruptWait(); // unblocks EventGetData immediately
+                    state.Stream?.InterruptWait();
                     thread.Join(5000);
                     state.Cancel.Dispose();
                 });
@@ -119,45 +127,43 @@ namespace Bonsai.GenICam
             string step = "init";
             try
             {
-                step = "resolve producer";
-                var (api, localIndex) = GenTLLoader.ResolveAndLoad(s.ProducerPath, s.DeviceIndex);
+                step = "open device";
+                var (api, system, iface, device) = OpenCamera(s);
                 using (api)
-                using (var system = new GenTLSystem(api))
+                using (system)
+                using (iface)
+                using (device)
                 {
-                    step = "find and open device";
-                    var (_, _, iface, device) = system.FindAndOpenDevice(localIndex);
-                    using (iface)
-                    using (device)
+                    step = "fetch device XML / build NodeMap";
+                    var nodeMap = new NodeMap(api, device.GetPort());
+                    s.Features.Apply(nodeMap);
+                    s.SetLiveNodeMap(nodeMap);
+                    step = "open data stream";
+                    using (var stream = device.OpenDataStream())
                     {
-                        step = "fetch device XML / build NodeMap";
-                        var nodeMap = new NodeMap(api, device.GetPort());
-                        s.Features.Apply(nodeMap);
-                        step = "open data stream";
-                        using (var stream = device.OpenDataStream())
+                        stream.SetFallbacks(
+                            TryReadInt(nodeMap, "Width"),
+                            TryReadInt(nodeMap, "Height"),
+                            TryReadPixelFmt(nodeMap));
+                        step = "start acquisition";
+                        stream.Start(s.NumBuffers);
+                        s.Stream = stream;
+                        TryExecuteCommand(nodeMap, "AcquisitionStart");
+                        step = "capture loop";
+                        try
                         {
-                            stream.SetFallbacks(
-                                TryReadInt(nodeMap, "Width"),
-                                TryReadInt(nodeMap, "Height"),
-                                TryReadPixelFmt(nodeMap));
-                            step = "start acquisition";
-                            stream.Start(s.NumBuffers);
-                            s.Stream = stream;
-                            TryExecuteCommand(nodeMap, "AcquisitionStart");
-                            step = "capture loop";
-                            try
+                            while (!s.Cancel.IsCancellationRequested)
                             {
-                                while (!s.Cancel.IsCancellationRequested)
-                                {
-                                    var frame = stream.WaitForFrame(s.FrameTimeoutMs);
-                                    if (frame != null)
-                                        s.Observer.OnNext(frame);
-                                }
+                                var frame = stream.WaitForFrame(s.FrameTimeoutMs);
+                                if (frame != null)
+                                    s.Observer.OnNext(frame);
                             }
-                            finally
-                            {
-                                TryExecuteCommand(nodeMap, "AcquisitionStop");
-                                stream.Stop();
-                            }
+                        }
+                        finally
+                        {
+                            s.SetLiveNodeMap(null);
+                            TryExecuteCommand(nodeMap, "AcquisitionStop");
+                            stream.Stop();
                         }
                     }
                 }
@@ -166,6 +172,35 @@ namespace Bonsai.GenICam
             catch (Exception ex) when (!s.Cancel.IsCancellationRequested)
             {
                 s.Observer.OnError(new Exception($"GenICamCapture failed at [{step}]: {ex.Message}", ex));
+            }
+        }
+
+        private static (GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device)
+            OpenCamera(CaptureState s)
+        {
+            if (s.SerialNumber != null || s.CameraModel != null)
+            {
+                // Identity-based selection: search the explicit producer, or all producers if none set.
+                return GenTLLoader.FindAndOpenDeviceAcrossProducers(
+                    s.SerialNumber, s.CameraModel, s.DeviceIndex, s.ProducerPath);
+            }
+            else
+            {
+                // Index-based selection: ResolveAndLoad finds the right producer for the global index.
+                var (api, localIndex) = GenTLLoader.ResolveAndLoad(s.ProducerPath, s.DeviceIndex);
+                GenTLSystem? system = null;
+                try
+                {
+                    system = new GenTLSystem(api);
+                    var r = system.FindAndOpenDevice(localIndex);
+                    return (api, system, r.iface, r.device);
+                }
+                catch
+                {
+                    system?.Dispose();
+                    api.Dispose();
+                    throw;
+                }
             }
         }
 
@@ -215,11 +250,92 @@ namespace Bonsai.GenICam
             public IObserver<IplImage> Observer = null!;
             public string? ProducerPath;
             public int DeviceIndex;
+            public string? CameraModel;
+            public string? SerialNumber;
             public int NumBuffers;
             public uint FrameTimeoutMs;
             public FeatureConfiguration Features = null!;
             public CancellationTokenSource Cancel = null!;
-            public volatile GenTLDataStream? Stream; // set by capture thread, read by dispose
+            public volatile GenTLDataStream? Stream;
+            public Action<NodeMap?> SetLiveNodeMap = null!;
+        }
+    }
+
+    internal class CameraModelEditor : UITypeEditor
+    {
+        public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext context) =>
+            UITypeEditorEditStyle.DropDown;
+
+        public override object? EditValue(ITypeDescriptorContext context, IServiceProvider provider, object? value)
+        {
+            var svc = provider?.GetService(typeof(IWindowsFormsEditorService)) as IWindowsFormsEditorService;
+            if (svc == null || !(context?.Instance is IGenICamSource source)) return value;
+
+            var lb = new ListBox { SelectionMode = SelectionMode.One, Height = 120 };
+            lb.Items.Add("(none — select by DeviceIndex only)");
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var path = string.IsNullOrWhiteSpace(source.ProducerPath) ? null : source.ProducerPath;
+                foreach (var info in GenTLLoader.EnumerateAllDeviceInfos(path))
+                {
+                    string combined = (info.Vendor + " " + info.Model).Trim();
+                    if (!string.IsNullOrEmpty(combined) && seen.Add(combined))
+                        lb.Items.Add(combined);
+                }
+            }
+            catch { }
+
+            if (value is string cur && !string.IsNullOrEmpty(cur))
+            {
+                int idx = lb.Items.IndexOf(cur);
+                if (idx >= 0) lb.SelectedIndex = idx;
+            }
+
+            lb.Click += (s, e) => svc.CloseDropDown();
+            svc.DropDownControl(lb);
+
+            if (lb.SelectedIndex <= 0) return null;
+            return lb.SelectedItem as string ?? value;
+        }
+    }
+
+    internal class SerialNumberEditor : UITypeEditor
+    {
+        public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext context) =>
+            UITypeEditorEditStyle.DropDown;
+
+        public override object? EditValue(ITypeDescriptorContext context, IServiceProvider provider, object? value)
+        {
+            var svc = provider?.GetService(typeof(IWindowsFormsEditorService)) as IWindowsFormsEditorService;
+            if (svc == null || !(context?.Instance is IGenICamSource source)) return value;
+
+            var lb = new ListBox { SelectionMode = SelectionMode.One, Height = 120 };
+            lb.Items.Add("(none — match by model or index)");
+
+            try
+            {
+                var path = string.IsNullOrWhiteSpace(source.ProducerPath) ? null : source.ProducerPath;
+                foreach (var info in GenTLLoader.EnumerateAllDeviceInfos(path))
+                {
+                    if (!string.IsNullOrEmpty(info.SerialNumber))
+                        lb.Items.Add(info.SerialNumber);
+                }
+            }
+            catch { }
+
+            if (value is string cur && !string.IsNullOrEmpty(cur))
+            {
+                int idx = lb.Items.IndexOf(cur);
+                if (idx >= 0) lb.SelectedIndex = idx;
+            }
+
+            lb.Click += (s, e) => svc.CloseDropDown();
+            svc.DropDownControl(lb);
+
+            if (lb.SelectedIndex <= 0) return null;
+            return lb.SelectedItem as string ?? value;
         }
     }
 }

@@ -39,9 +39,12 @@ A [Bonsai](https://bonsai-rx.org) package for acquiring images and reading/writi
 
 **GenICamCapture**
 - `ProducerPath` — optional path to a specific `.cti` file (leave blank to use `GENICAM_GENTL64_PATH`)
-- `DeviceIndex` — camera index (default `0`)
+- `DeviceIndex` — zero-based camera index in the enumerated list; when `CameraModel` is set, counts only within cameras of that model (default `0`)
+- `CameraModel` — optional vendor+model string, e.g. `Basler Blackfly S BFS-U3-16S2M`; click the dropdown to pick from detected cameras. Stored in the workflow. When set, the correct camera is selected by model name (and `DeviceIndex` within that model) rather than by global index, so the workflow still works correctly if cameras are enumerated in a different order across sessions.
+- `SerialNumber` — optional serial number; click the dropdown to pick from detected cameras. When set, the camera is found by serial regardless of `CameraModel` or `DeviceIndex`. A mismatch at startup causes an error. Storing this is the safest way to pin a workflow to a specific physical camera.
 - `NumBuffers` — acquisition buffer count (default `4`)
 - `FrameTimeoutMs` — per-frame timeout in ms (default `5000`)
+- `Features` — camera feature overrides applied at startup (click `...` to open the feature editor)
 
 **GetFeatureNode / SetFeatureNode**
 - `FeatureName` — GenICam XML feature name, e.g. `ExposureTime`, `Gain`, `AcquisitionFrameRate`
@@ -212,10 +215,13 @@ Buffer metadata (width, height, pixel format) from `DSGetBufferInfo`. Pixel form
 // Streams frames while subscribed; shares one camera connection per subscriber
 public class GenICamCapture : Source<IplImage>
 {
-    public string ProducerPath { get; set; }   // optional .cti override
-    public int DeviceIndex { get; set; }
-    public int NumBuffers { get; set; } = 4;
-    public int FrameTimeoutMs { get; set; } = 5000;
+    public string  ProducerPath  { get; set; }   // optional .cti override
+    public int     DeviceIndex   { get; set; }   // global index, or index within matching model group
+    public string? CameraModel   { get; set; }   // e.g. "Basler Blackfly S BFS-U3-16S2M"
+    public string? SerialNumber  { get; set; }   // overrides CameraModel+DeviceIndex when set
+    public int     NumBuffers    { get; set; } = 4;
+    public uint    FrameTimeoutMs { get; set; } = 5000;
+    public FeatureConfiguration Features { get; set; }   // startup feature overrides
 }
 
 // Emits once on subscribe

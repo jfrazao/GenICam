@@ -55,6 +55,93 @@ namespace Bonsai.GenICam.GenTL
                 $"No GenTL producers found. Set {envVar} or specify a ProducerPath.");
         }
 
+        // Enumerate devices from all producers (or just the specified one).
+        // Same logic as EnumerateDevices operator — disposes api/system internally, caller gets DeviceInfo only.
+        internal static DeviceInfo[] EnumerateAllDeviceInfos(string? explicitProducerPath)
+        {
+            var results = new List<DeviceInfo>();
+            int globalIndex = 0;
+
+            IEnumerable<string> paths = explicitProducerPath != null
+                ? (IEnumerable<string>)new[] { explicitProducerPath }
+                : FindProducers();
+
+            lock (ScanLock)
+            foreach (string ctiPath in paths)
+            {
+                try
+                {
+                    using (var api = new GenTLApi(ctiPath))
+                    using (var system = new GenTLSystem(api))
+                    {
+                        foreach (string ifaceId in system.GetInterfaceIDs())
+                        {
+                            using (var iface = system.OpenInterface(ifaceId))
+                            {
+                                foreach (string devId in iface.GetDeviceIDs())
+                                {
+                                    string TryGet(DeviceInfoCmd cmd)
+                                    { try { return iface.GetDeviceInfoString(devId, cmd); } catch { return string.Empty; } }
+                                    results.Add(new DeviceInfo
+                                    {
+                                        GlobalIndex   = globalIndex++,
+                                        ID            = devId,
+                                        InterfaceID   = ifaceId,
+                                        ProducerPath  = api.ProducerPath,
+                                        Vendor        = TryGet(DeviceInfoCmd.Vendor),
+                                        Model         = TryGet(DeviceInfoCmd.Model),
+                                        SerialNumber  = TryGet(DeviceInfoCmd.SerialNumber),
+                                        TLType        = TryGet(DeviceInfoCmd.TLType),
+                                        DisplayName   = TryGet(DeviceInfoCmd.DisplayName)
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+            return results.ToArray();
+        }
+
+        // Find and open a device by serial or model across all producers (or just the specified one).
+        // Caller owns all four returned objects and must dispose them.
+        internal static (GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device)
+            FindAndOpenDeviceAcrossProducers(
+                string? serialNumber, string? cameraModel, int modelIndex,
+                string? explicitProducerPath = null,
+                DeviceAccessFlags flags = DeviceAccessFlags.Control)
+        {
+            IEnumerable<string> paths = explicitProducerPath != null
+                ? (IEnumerable<string>)new[] { explicitProducerPath }
+                : FindProducers();
+
+            foreach (string ctiPath in paths)
+            {
+                GenTLApi? api = null;
+                GenTLSystem? system = null;
+                try
+                {
+                    api = new GenTLApi(ctiPath);
+                    system = new GenTLSystem(api);
+                    var r = serialNumber != null
+                        ? system.FindAndOpenDeviceBySerial(serialNumber, flags)
+                        : system.FindAndOpenDeviceByModel(cameraModel!, modelIndex, flags);
+                    return (api, system, r.iface, r.device);
+                }
+                catch
+                {
+                    system?.Dispose();
+                    api?.Dispose();
+                }
+            }
+
+            string desc = serialNumber != null
+                ? $"serial number '{serialNumber}'"
+                : $"model '{cameraModel}' at index {modelIndex}";
+            throw new InvalidOperationException($"No camera with {desc} found in any GenTL producer.");
+        }
+
         // Loads the correct producer for the given device index and returns it already initialized,
         // avoiding a double-load race. When explicitProducerPath is set uses only that producer.
         // Caller owns the returned GenTLApi and must dispose it.

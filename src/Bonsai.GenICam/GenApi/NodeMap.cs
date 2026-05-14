@@ -523,13 +523,13 @@ namespace Bonsai.GenICam.GenApi
             switch (node)
             {
                 case MaskedIntRegNode r:
-                    WriteMaskedIntReg(r, Convert.ToInt64(valueStr));
+                    WriteMaskedIntReg(r, long.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture));
                     break;
                 case IntRegNode r:
-                    WriteIntReg(r, Convert.ToInt64(valueStr));
+                    WriteIntReg(r, long.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture));
                     break;
                 case FloatRegNode r:
-                    WriteFloatReg(r, Convert.ToDouble(valueStr));
+                    WriteFloatReg(r, double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture));
                     break;
                 case StringRegNode r:
                     WriteStringReg(r, valueStr);
@@ -568,7 +568,7 @@ namespace Bonsai.GenICam.GenApi
                     throw new InvalidOperationException("SwissKnife nodes are read-only.");
                 case ConverterNode n:
                 {
-                    double to = Convert.ToDouble(valueStr);
+                    double to = double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture);
                     var vars = new Dictionary<string, double>(StringComparer.Ordinal) { ["TO"] = to };
                     double raw = EvaluateFormula(n.FormulaFrom, vars);
                     WriteNode(ResolveRef(n.PValue), raw.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -576,7 +576,7 @@ namespace Bonsai.GenICam.GenApi
                 }
                 case IntConverterNode n:
                 {
-                    double to = Convert.ToDouble(valueStr);
+                    double to = double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture);
                     var vars = new Dictionary<string, double>(StringComparer.Ordinal) { ["TO"] = to };
                     long raw = (long)EvaluateFormula(n.FormulaFrom, vars);
                     WriteNode(ResolveRef(n.PValue), raw.ToString());
