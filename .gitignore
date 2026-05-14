@@ -24,5 +24,8 @@ packages/
 .bonsai/*.exe.*
 .bonsai/Settings/
 
+# Bonsai workflow layout files (window positions, visualizer state)
+workflows/*.layout
+
 # Claude Code
 .claude/
