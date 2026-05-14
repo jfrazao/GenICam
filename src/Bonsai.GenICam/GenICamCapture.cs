@@ -16,6 +16,7 @@ using OpenCV.Net;
 namespace Bonsai.GenICam
 {
     [Description("Acquires a sequence of images from a GenICam GenTL camera.")]
+    [Editor("Bonsai.GenICam.GenICamCaptureEditor, Bonsai.GenICam", typeof(ComponentEditor))]
     public class GenICamCapture : Source<IplImage>, IGenICamSource, INotifyPropertyChanged
     {
         private string? _producerPath;
