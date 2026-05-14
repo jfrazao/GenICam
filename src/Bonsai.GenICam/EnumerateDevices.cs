@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Reactive.Linq;
 using Bonsai;
@@ -21,54 +20,8 @@ namespace Bonsai.GenICam
 
         private DeviceInfo[] Enumerate()
         {
-            var results = new List<DeviceInfo>();
-            int globalIndex = 0;
-
-            IEnumerable<string> producers = string.IsNullOrWhiteSpace(ProducerPath)
-                ? GenTLLoader.FindProducers()
-                : new[] { ProducerPath! };
-
-            lock (GenTLLoader.ScanLock)
-            foreach (string ctiPath in producers)
-            {
-                try
-                {
-                    using (var api = GenTLLoader.Load(ctiPath))
-                    using (var system = new GenTLSystem(api))
-                    {
-                        foreach (string ifaceId in system.GetInterfaceIDs())
-                        {
-                            using (var iface = system.OpenInterface(ifaceId))
-                            {
-                                foreach (string devId in iface.GetDeviceIDs())
-                                {
-                                    string TryGet(DeviceInfoCmd cmd)
-                                    {
-                                        try { return iface.GetDeviceInfoString(devId, cmd); }
-                                        catch { return string.Empty; }
-                                    }
-
-                                    results.Add(new DeviceInfo
-                                    {
-                                        GlobalIndex = globalIndex++,
-                                        ID = devId,
-                                        InterfaceID = ifaceId,
-                                        ProducerPath = api.ProducerPath,
-                                        Vendor = TryGet(DeviceInfoCmd.Vendor),
-                                        Model = TryGet(DeviceInfoCmd.Model),
-                                        SerialNumber = TryGet(DeviceInfoCmd.SerialNumber),
-                                        TLType = TryGet(DeviceInfoCmd.TLType),
-                                        DisplayName = TryGet(DeviceInfoCmd.DisplayName)
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-                catch { /* producer failed to init or enumerate — skip it */ }
-            }
-
-            return results.ToArray();
+            var path = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
+            return GenTLLoader.EnumerateAllDeviceInfos(path);
         }
     }
 }
