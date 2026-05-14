@@ -16,7 +16,7 @@ namespace Bonsai.GenICam.TestApp
 
             // --- Enumerate ---
             Console.WriteLine("Enumerating GenICam devices...");
-            DeviceInfo[] devices = null;
+            DeviceInfo[]? devices = null;
             try { devices = new EnumerateDevices().Generate().Wait(); }
             catch (Exception ex) { Console.WriteLine($"Enumeration failed: {ex.Message}"); Environment.Exit(1); return; }
 
@@ -51,11 +51,6 @@ namespace Bonsai.GenICam.TestApp
                     string filename = System.IO.Path.Combine(outputDir, $"camera_{i}_{devices[i].Model.Replace(" ", "_")}.xml");
                     System.IO.File.WriteAllText(filename, xml);
                     Console.WriteLine($"Saved to: {filename}");
-                    
-                    // Display first 2000 characters
-                    Console.WriteLine(xml.Substring(0, Math.Min(2000, xml.Length)));
-                    if (xml.Length > 2000)
-                        Console.WriteLine($"... ({xml.Length - 2000} more characters)");
                 }
                 catch (Exception ex)
                 {
@@ -70,7 +65,6 @@ namespace Bonsai.GenICam.TestApp
             try
             {
                 var features = new ListFeatureValues { DeviceIndex = targetIndex }.Generate().Wait();
-                Console.WriteLine($"  {features.Length} readable features:");
                 foreach (var f in features)
                     Console.WriteLine($"  {f.Name} = {f.Value}");
             }

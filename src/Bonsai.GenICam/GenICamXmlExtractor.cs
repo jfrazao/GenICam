@@ -12,7 +12,7 @@ namespace Bonsai.GenICam
     /// </summary>
     public static class GenICamXmlExtractor
     {
-        public static string ExtractXml(string producerPath, int deviceIndex)
+        public static string ExtractXml(string? producerPath, int deviceIndex)
         {
             var (api, localIndex) = GenTLLoader.ResolveAndLoad(
                 string.IsNullOrWhiteSpace(producerPath) ? null : producerPath, deviceIndex);
