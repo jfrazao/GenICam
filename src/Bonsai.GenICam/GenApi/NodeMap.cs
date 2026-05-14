@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml.Linq;
@@ -24,83 +22,8 @@ namespace Bonsai.GenICam.GenApi
         {
             _api = api;
             _port = port;
-            var xml = FetchXml();
+            var xml = GenICamXmlExtractor.FetchXml(_api, _port);
             ParseXml(xml);
-        }
-
-        private string FetchXml()
-        {
-            string url = GenTLApi.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
-                return _api.GCGetPortURL(_port, buf, ref sz);
-            });
-
-            if (url.StartsWith("local:", StringComparison.OrdinalIgnoreCase))
-            {
-                // Format: "local:FileName.xml;HexAddress;HexLength"
-                var parts = url.Substring(6).Split(';');
-                if (parts.Length < 3)
-                    throw new InvalidOperationException($"Unexpected local: URL format: {url}");
-
-                ulong address = ParseHex(parts[1]);
-                int length = (int)ParseHex(parts[2]);
-
-                var bytes = new byte[length];
-                var size = new UIntPtr((uint)length);
-                GenTLException.Check(_api.GCReadPort(_port, address, bytes, ref size));
-
-                return DecompressOrDecode(bytes, parts[0], url);
-            }
-            else if (url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
-            {
-                return File.ReadAllText(new Uri(url).LocalPath, Encoding.UTF8);
-            }
-            else
-            {
-                throw new NotSupportedException($"Unsupported GenICam XML URL scheme: {url}");
-            }
-        }
-
-        private static ulong ParseHex(string s)
-        {
-            s = s.Trim();
-            // Strip optional query string (e.g. "116bf?SchemaVersion=1.0.0" from HikRobot)
-            int q = s.IndexOf('?');
-            if (q >= 0) s = s.Substring(0, q);
-            // Strip optional 0x / &H prefix
-            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ||
-                s.StartsWith("&H", StringComparison.OrdinalIgnoreCase))
-                s = s.Substring(2);
-            return Convert.ToUInt64(s, 16);
-        }
-
-        private static string DecompressOrDecode(byte[] bytes, string filename, string url)
-        {
-            // ZIP: PK magic (0x50 0x4B) or .zip extension
-            if ((bytes.Length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B) ||
-                filename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                using (var ms = new MemoryStream(bytes))
-                using (var archive = new ZipArchive(ms, ZipArchiveMode.Read))
-                {
-                    if (archive.Entries.Count == 0)
-                        throw new InvalidOperationException($"GenICam XML ZIP at '{url}' contains no entries.");
-                    using (var reader = new StreamReader(archive.Entries[0].Open(), Encoding.UTF8, detectEncodingFromByteOrderMarks: false))
-                        return reader.ReadToEnd();
-                }
-            }
-
-            // GZIP: magic bytes 1F 8B
-            if (bytes.Length >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B)
-            {
-                using (var ms = new MemoryStream(bytes))
-                using (var gz = new GZipStream(ms, CompressionMode.Decompress))
-                using (var reader = new StreamReader(gz, Encoding.UTF8))
-                    return reader.ReadToEnd();
-            }
-
-            // Plain text — skip UTF-8 BOM if present
-            int offset = (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) ? 3 : 0;
-            return Encoding.UTF8.GetString(bytes, offset, bytes.Length - offset);
         }
 
         private void ParseXml(string xmlText)

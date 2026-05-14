@@ -14,8 +14,6 @@ namespace Bonsai.GenICam.GenTL
             _handle = handle;
         }
 
-        internal IntPtr Handle => _handle;
-
         internal IntPtr GetPort()
         {
             GenTLException.Check(_api.DevGetPort(_handle, out IntPtr hPort));

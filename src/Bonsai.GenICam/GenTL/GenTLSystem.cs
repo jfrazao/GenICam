@@ -83,36 +83,6 @@ namespace Bonsai.GenICam.GenTL
                 $"Device index {index} not found. Only {current} device(s) are visible.");
         }
 
-        internal IReadOnlyList<DeviceInfo> EnumerateDeviceInfos(string producerPath)
-        {
-            var result = new List<DeviceInfo>();
-            int globalIndex = 0;
-            foreach (string ifaceId in GetInterfaceIDs())
-            {
-                using (var iface = OpenInterface(ifaceId))
-                {
-                    foreach (string devId in iface.GetDeviceIDs())
-                    {
-                        string TryGet(DeviceInfoCmd cmd)
-                        { try { return iface.GetDeviceInfoString(devId, cmd); } catch { return string.Empty; } }
-                        result.Add(new DeviceInfo
-                        {
-                            GlobalIndex = globalIndex++,
-                            ID = devId,
-                            InterfaceID = ifaceId,
-                            ProducerPath = producerPath,
-                            Vendor = TryGet(DeviceInfoCmd.Vendor),
-                            Model = TryGet(DeviceInfoCmd.Model),
-                            SerialNumber = TryGet(DeviceInfoCmd.SerialNumber),
-                            TLType = TryGet(DeviceInfoCmd.TLType),
-                            DisplayName = TryGet(DeviceInfoCmd.DisplayName)
-                        });
-                    }
-                }
-            }
-            return result;
-        }
-
         internal (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) FindAndOpenDeviceBySerial(
             string serialNumber, DeviceAccessFlags flags = DeviceAccessFlags.Control)
         {
