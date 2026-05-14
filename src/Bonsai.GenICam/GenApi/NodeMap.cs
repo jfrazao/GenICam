@@ -53,7 +53,10 @@ namespace Bonsai.GenICam.GenApi
                 NodeBase? node = ParseElement(el, ns, name);
                 if (node != null)
                 {
-                    node.Description = ((string)el.Element(ns + "Description") ?? (string)el.Element(ns + "ToolTip"))?.Trim();
+                    node.Description = ((string)el.Element(ns + "Description"))?.Trim();
+                    node.ToolTip     = ((string)el.Element(ns + "ToolTip"))?.Trim();
+                    if (node.Description == null) node.Description = node.ToolTip;
+                    node.Visibility  = ParseVisibility((string)el.Element(ns + "Visibility"));
                     _nodes[name] = node;
                 }
             }
@@ -141,6 +144,7 @@ namespace Bonsai.GenICam.GenApi
                     if (pv == null && val != null)
                         return new IntegerNode { Name = name, AccessMode = NodeAccessMode.RO, ConstantValue = ParseLongLiteral(val) };
                     string minS = (string)el.Element(ns + "Min"), maxS = (string)el.Element(ns + "Max"), incS = (string)el.Element(ns + "Inc");
+                    string dpS = (string)el.Element(ns + "DisplayPrecision");
                     return new IntegerNode
                     {
                         Name = name, AccessMode = accessMode, PValue = pv,
@@ -149,13 +153,18 @@ namespace Bonsai.GenICam.GenApi
                         LiteralInc = incS != null ? (long?)ParseLongLiteral(incS) : null,
                         PMin = (string)el.Element(ns + "pMin"),
                         PMax = (string)el.Element(ns + "pMax"),
-                        PInc = (string)el.Element(ns + "pInc")
+                        PInc = (string)el.Element(ns + "pInc"),
+                        Unit = ((string)el.Element(ns + "Unit"))?.Trim(),
+                        Representation = ParseRepresentation((string)el.Element(ns + "Representation")),
+                        DisplayNotation = ParseDisplayNotation((string)el.Element(ns + "DisplayNotation")),
+                        DisplayPrecision = dpS != null ? (int?)int.Parse(dpS.Trim()) : null
                     };
                 }
 
                 case "Float":
                 {
                     string minS = (string)el.Element(ns + "Min"), maxS = (string)el.Element(ns + "Max");
+                    string dpS = (string)el.Element(ns + "DisplayPrecision");
                     return new FloatNode
                     {
                         Name = name, AccessMode = accessMode,
@@ -163,7 +172,11 @@ namespace Bonsai.GenICam.GenApi
                         LiteralMin = minS != null ? (double?)double.Parse(minS.Trim(), System.Globalization.CultureInfo.InvariantCulture) : null,
                         LiteralMax = maxS != null ? (double?)double.Parse(maxS.Trim(), System.Globalization.CultureInfo.InvariantCulture) : null,
                         PMin = (string)el.Element(ns + "pMin"),
-                        PMax = (string)el.Element(ns + "pMax")
+                        PMax = (string)el.Element(ns + "pMax"),
+                        Unit = ((string)el.Element(ns + "Unit"))?.Trim(),
+                        Representation = ParseRepresentation((string)el.Element(ns + "Representation")),
+                        DisplayNotation = ParseDisplayNotation((string)el.Element(ns + "DisplayNotation")),
+                        DisplayPrecision = dpS != null ? (int?)int.Parse(dpS.Trim()) : null
                     };
                 }
 
@@ -311,23 +324,96 @@ namespace Bonsai.GenICam.GenApi
         internal string GetNodeDescription(string name)
             => _nodes.TryGetValue(name, out var node) ? node.Description ?? "" : "";
 
+        internal string? GetNodeToolTip(string name)
+            => _nodes.TryGetValue(name, out var node) ? node.ToolTip : null;
+
+        internal NodeVisibility GetNodeVisibility(string name)
+            => _nodes.TryGetValue(name, out var node) ? node.Visibility : NodeVisibility.Beginner;
+
+        internal string? GetNodeUnit(string name)
+        {
+            if (!_nodes.TryGetValue(name, out var node)) return null;
+            return FindUnit(node);
+        }
+
+        internal NodeRepresentation GetNodeRepresentation(string name)
+        {
+            if (!_nodes.TryGetValue(name, out var node)) return NodeRepresentation.Linear;
+            return FindRepresentation(node) ?? NodeRepresentation.Linear;
+        }
+
+        internal int? GetNodeDisplayPrecision(string name)
+        {
+            if (!_nodes.TryGetValue(name, out var node)) return null;
+            return FindDisplayPrecision(node);
+        }
+
+        private string? FindUnit(NodeBase node)
+        {
+            string? unit = node is IntegerNode i ? i.Unit : node is FloatNode f ? f.Unit : null;
+            if (unit != null) return unit;
+            string? pv = NodePValue(node);
+            if (pv != null) { try { return FindUnit(Resolve(pv)); } catch { } }
+            return null;
+        }
+
+        private NodeRepresentation? FindRepresentation(NodeBase node)
+        {
+            if (node is IntegerNode i) return i.Representation;
+            if (node is FloatNode f)   return f.Representation;
+            string? pv = NodePValue(node);
+            if (pv != null) { try { return FindRepresentation(Resolve(pv)); } catch { } }
+            return null;
+        }
+
+        private int? FindDisplayPrecision(NodeBase node)
+        {
+            if (node is IntegerNode i) return i.DisplayPrecision;
+            if (node is FloatNode f)   return f.DisplayPrecision;
+            string? pv = NodePValue(node);
+            if (pv != null) { try { return FindDisplayPrecision(Resolve(pv)); } catch { } }
+            return null;
+        }
+
         internal FeatureKind GetNodeKind(string name)
         {
             if (!_nodes.TryGetValue(name, out var node)) return FeatureKind.Text;
-            switch (node)
-            {
-                case EnumerationNode _: return FeatureKind.Enumeration;
-                case BooleanNode _:     return FeatureKind.Boolean;
-                case CommandNode _:     return FeatureKind.Command;
-                case FloatRegNode _:
-                case FloatNode _:
-                case SwissKnifeNode _:
-                case ConverterNode _:   return FeatureKind.Float;
-                case StringRegNode _:
-                case StringNode _:      return FeatureKind.Text;
-                default:                return FeatureKind.Integer;
-            }
+            return EffectiveKind(node);
         }
+
+        // Walks the full pValue chain to the terminal register node and classifies based on that.
+        // FloatReg/SwissKnife → Float; IntReg/MaskedIntReg/IntSwissKnife → Integer.
+        // All intermediate chain nodes (FloatNode, IntegerNode, ConverterNode, IntConverterNode)
+        // are transparent — so ExposureTime → [any converter] → IntReg correctly returns Integer.
+        private FeatureKind EffectiveKind(NodeBase node)
+        {
+            // Terminal register nodes — classification ends here
+            if (node is FloatRegNode || node is SwissKnifeNode) return FeatureKind.Float;
+            if (node is IntRegNode || node is MaskedIntRegNode || node is IntSwissKnifeNode) return FeatureKind.Integer;
+            if (node is StringRegNode || node is StringNode) return FeatureKind.Text;
+            if (node is EnumerationNode) return FeatureKind.Enumeration;
+            if (node is BooleanNode)     return FeatureKind.Boolean;
+            if (node is CommandNode)     return FeatureKind.Command;
+
+            // Chain nodes — follow pValue to the terminal
+            string? pv = NodePValue(node);
+            if (pv != null)
+            {
+                try { return EffectiveKind(Resolve(pv)); }
+                catch { }
+            }
+            // Fallback for unresolvable chains
+            return node is FloatNode || node is ConverterNode ? FeatureKind.Float : FeatureKind.Integer;
+        }
+
+        private static string? NodePValue(NodeBase node) => node switch
+        {
+            FloatNode n        => n.PValue,
+            IntegerNode n      => n.ConstantValue.HasValue ? null : n.PValue,
+            ConverterNode n    => n.PValue,
+            IntConverterNode n => n.PValue,
+            _                  => null
+        };
 
         internal IReadOnlyList<string> GetEnumEntries(string name)
         {
@@ -349,6 +435,11 @@ namespace Bonsai.GenICam.GenApi
         internal (double? min, double? max, double? step) GetNodeLimits(string name)
         {
             if (!_nodes.TryGetValue(name, out var node)) return (null, null, null);
+            return EffectiveLimits(node);
+        }
+
+        private (double? min, double? max, double? step) EffectiveLimits(NodeBase node)
+        {
             double? TryReadRef(string refName) { try { return Convert.ToDouble(ReadNode(Resolve(refName))); } catch { return null; } }
 
             if (node is IntegerNode n)
@@ -362,7 +453,27 @@ namespace Bonsai.GenICam.GenApi
             {
                 double? min = f.LiteralMin.HasValue ? (double?)f.LiteralMin.Value : (f.PMin != null ? TryReadRef(f.PMin) : null);
                 double? max = f.LiteralMax.HasValue ? (double?)f.LiteralMax.Value : (f.PMax != null ? TryReadRef(f.PMax) : null);
+                // Always resolve through pValue: pick up missing min/max and get step from the
+                // backing integer node (FloatNode never defines its own increment).
+                if (f.PValue != null)
+                {
+                    try
+                    {
+                        var (bMin, bMax, bStep) = EffectiveLimits(Resolve(f.PValue));
+                        if (!min.HasValue) min = bMin;
+                        if (!max.HasValue) max = bMax;
+                        return (min, max, bStep);
+                    }
+                    catch { }
+                }
                 return (min, max, null);
+            }
+            // Walk through converter/other chain nodes to reach the backing integer node's limits
+            string? pv = NodePValue(node);
+            if (pv != null)
+            {
+                try { return EffectiveLimits(Resolve(pv)); }
+                catch { }
             }
             return (null, null, null);
         }
@@ -681,6 +792,32 @@ namespace Bonsai.GenICam.GenApi
                 default: return NodeAccessMode.RW;
             }
         }
+
+        private static NodeVisibility ParseVisibility(string? s) => s?.Trim() switch
+        {
+            "Expert"    => NodeVisibility.Expert,
+            "Guru"      => NodeVisibility.Guru,
+            "Invisible" => NodeVisibility.Invisible,
+            _           => NodeVisibility.Beginner
+        };
+
+        private static NodeRepresentation ParseRepresentation(string? s) => s?.Trim() switch
+        {
+            "Logarithmic" => NodeRepresentation.Logarithmic,
+            "Boolean"     => NodeRepresentation.Boolean,
+            "PureNumber"  => NodeRepresentation.PureNumber,
+            "HexNumber"   => NodeRepresentation.HexNumber,
+            "IPV4Address" => NodeRepresentation.IPV4Address,
+            "MACAddress"  => NodeRepresentation.MACAddress,
+            _             => NodeRepresentation.Linear
+        };
+
+        private static NodeDisplayNotation ParseDisplayNotation(string? s) => s?.Trim() switch
+        {
+            "Fixed"       => NodeDisplayNotation.Fixed,
+            "Exponential" => NodeDisplayNotation.Exponential,
+            _             => NodeDisplayNotation.Automatic
+        };
 
         private static ulong ToUInt64(byte[] buf, int length, bool littleEndian)
         {

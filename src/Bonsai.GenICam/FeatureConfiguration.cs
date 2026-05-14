@@ -9,6 +9,8 @@ using System.Windows.Forms.VisualStyles;
 using System.Xml.Serialization;
 using Bonsai.GenICam.GenApi;
 using Bonsai.GenICam.GenTL;
+using static Bonsai.GenICam.GenApi.NodeRepresentation;
+using static Bonsai.GenICam.GenApi.NodeVisibility;
 
 namespace Bonsai.GenICam
 {
@@ -74,7 +76,11 @@ namespace Bonsai.GenICam
         public bool Writable { get; }
         public string? Category { get; set; }
         public string? Description { get; set; }
+        public string? Unit { get; set; }
         internal FeatureKind Kind { get; set; }
+        internal NodeVisibility Visibility { get; set; } = NodeVisibility.Beginner;
+        internal NodeRepresentation Representation { get; set; } = NodeRepresentation.Linear;
+        internal int DecimalPlaces { get; set; }
         internal IReadOnlyList<string>? EnumEntries { get; set; }
         internal double? MinValue { get; set; }
         internal double? MaxValue { get; set; }
@@ -87,8 +93,13 @@ namespace Bonsai.GenICam
             Writable = writable;
         }
 
-        internal static string? ValueToString(object? value)
+        internal static string? ValueToString(object? value, NodeRepresentation rep = NodeRepresentation.Linear)
         {
+            if (rep == NodeRepresentation.HexNumber)
+            {
+                if (value is long l)   return $"0x{l:X}";
+                if (value is int i)    return $"0x{i:X}";
+            }
             if (value is double d) return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
             if (value is float f)  return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
             return value?.ToString();
@@ -126,6 +137,7 @@ namespace Bonsai.GenICam
         private readonly Button closeButton;
         private readonly Label deviceInfoLabel;
         private readonly ComboBox overlayCombo;
+        private readonly ComboBox visibilityCombo;
         private readonly Panel overlayNumericPanel;
         private readonly NumericUpDown overlayNumeric;
         private readonly TrackBar overlayTrackBar;
@@ -168,6 +180,7 @@ namespace Bonsai.GenICam
             };
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "Feature", DataPropertyName = "Name", ReadOnly = true, FillWeight = 4 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Value", HeaderText = "Value", DataPropertyName = "DisplayValue", ReadOnly = false, FillWeight = 4 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Unit", HeaderText = "Unit", DataPropertyName = "Unit", ReadOnly = true, FillWeight = 1 });
             grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Override", HeaderText = "Startup", DataPropertyName = "Overridden", ReadOnly = true, FillWeight = 1 });
             _valueColumnIndex    = grid.Columns["Value"].Index;
             _overrideColumnIndex = grid.Columns["Override"].Index;
@@ -221,6 +234,11 @@ namespace Bonsai.GenICam
             closeButton   = new Button { Text = "Close", DialogResult = DialogResult.OK, Width = 100, Height = 28 };
             refreshButton.Click += (s, e) => RefreshFromDevice();
 
+            visibilityCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
+            visibilityCombo.Items.AddRange(new object[] { "All", "Beginner", "Expert", "Guru" });
+            visibilityCombo.SelectedIndex = 0;
+            visibilityCombo.SelectedIndexChanged += (s, e) => UpdateGrid();
+
             var buttonPanel = new FlowLayoutPanel
             {
                 FlowDirection = FlowDirection.RightToLeft,
@@ -229,6 +247,9 @@ namespace Bonsai.GenICam
             };
             buttonPanel.Controls.Add(closeButton);
             buttonPanel.Controls.Add(refreshButton);
+            // Visibility label+combo appear on the left side (added last in RightToLeft flow)
+            buttonPanel.Controls.Add(new Label { Text = "Show:", AutoSize = true, Padding = new Padding(4, 6, 2, 0) });
+            buttonPanel.Controls.Add(visibilityCombo);
 
             categoryList = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
             categoryList.SelectedIndexChanged += CategoryList_SelectedIndexChanged;
@@ -346,18 +367,23 @@ namespace Bonsai.GenICam
             var entries = new List<FeatureDisplayEntry>();
             foreach (var fv in map.TryReadAll())
             {
-                bool writable = map.CanWrite(fv.Name);
+                bool writable   = map.CanWrite(fv.Name);
                 featCategory.TryGetValue(fv.Name, out string category);
                 var kind        = map.GetNodeKind(fv.Name);
+                var vis         = map.GetNodeVisibility(fv.Name);
+                var rep         = map.GetNodeRepresentation(fv.Name);
+                var unit        = map.GetNodeUnit(fv.Name);
                 var enumEntries = kind == FeatureKind.Enumeration ? map.GetEnumEntries(fv.Name) : null;
                 double? min = null, max = null, step = null;
                 if (kind == FeatureKind.Integer || kind == FeatureKind.Float)
                 { var lim = map.GetNodeLimits(fv.Name); min = lim.min; max = lim.max; step = lim.step; }
+                int dp = kind == FeatureKind.Integer ? 0 : (map.GetNodeDisplayPrecision(fv.Name) ?? 6);
 
-                var entry = new FeatureDisplayEntry(fv.Name, FeatureDisplayEntry.ValueToString(fv.Value), writable)
+                var entry = new FeatureDisplayEntry(fv.Name, FeatureDisplayEntry.ValueToString(fv.Value, rep), writable)
                 {
                     Category = category, Description = map.GetNodeDescription(fv.Name),
-                    Kind = kind, EnumEntries = enumEntries,
+                    Kind = kind, Visibility = vis, Representation = rep, Unit = unit,
+                    DecimalPlaces = dp, EnumEntries = enumEntries,
                     MinValue = min, MaxValue = max, StepValue = step,
                     Overridden = Configuration.HasOverride(fv.Name)
                 };
@@ -370,6 +396,7 @@ namespace Bonsai.GenICam
                 entries.Add(new FeatureDisplayEntry(cmdName, null, true)
                 {
                     Kind = FeatureKind.Command, Category = cmdCat,
+                    Visibility = map.GetNodeVisibility(cmdName),
                     Description = map.GetNodeDescription(cmdName),
                     Overridden = false
                 });
@@ -420,6 +447,17 @@ namespace Bonsai.GenICam
             var entries = _selectedCategory == null
                 ? _displayEntries
                 : _displayEntries.Where(e => string.Equals(e.Category, _selectedCategory, StringComparison.Ordinal)).ToList();
+
+            // Always hide Invisible features; then apply the Show filter
+            NodeVisibility maxVis = visibilityCombo.SelectedIndex switch
+            {
+                1 => Beginner,
+                2 => Expert,
+                3 => Guru,
+                _ => Guru   // "All" → show up to Guru (Invisible always hidden)
+            };
+            entries = entries.Where(e => e.Visibility != Invisible && e.Visibility <= maxVis).ToList();
+
             grid.DataSource = null;
             grid.DataSource = new BindingList<FeatureDisplayEntry>(entries);
         }
@@ -498,10 +536,8 @@ namespace Bonsai.GenICam
                     ShowEnumOverlay(e.RowIndex, entry);
                     break;
                 case FeatureKind.Integer:
-                    ShowNumericOverlay(e.RowIndex, entry, 0);
-                    break;
                 case FeatureKind.Float:
-                    ShowNumericOverlay(e.RowIndex, entry, 6);
+                    ShowNumericOverlay(e.RowIndex, entry);
                     break;
             }
         }
@@ -525,32 +561,39 @@ namespace Bonsai.GenICam
             BeginInvoke(new Action(() => { if (overlayCombo.Visible) overlayCombo.DroppedDown = true; }));
         }
 
-        private void ShowNumericOverlay(int rowIndex, FeatureDisplayEntry entry, int decimalPlaces)
+        private void ShowNumericOverlay(int rowIndex, FeatureDisplayEntry entry)
         {
             HideOverlays();
             var bounds = grid.GetCellDisplayRectangle(_valueColumnIndex, rowIndex, true);
             if (bounds.IsEmpty) return;
             _overlayEntry = entry; _overlayRowIndex = rowIndex;
 
-            overlayNumeric.DecimalPlaces = decimalPlaces;
+            int dp = entry.DecimalPlaces;
+            bool isHex = entry.Representation == HexNumber;
+            overlayNumeric.DecimalPlaces  = isHex ? 0 : dp;
+            overlayNumeric.Hexadecimal    = isHex;
             overlayNumeric.Minimum = entry.MinValue.HasValue ? (decimal)Math.Max((double)decimal.MinValue / 2, entry.MinValue.Value)
-                                   : (decimalPlaces == 0 ? (decimal)long.MinValue : -1e15m);
+                                   : (dp == 0 ? (decimal)long.MinValue : -1e15m);
             overlayNumeric.Maximum = entry.MaxValue.HasValue ? (decimal)Math.Min((double)decimal.MaxValue / 2, entry.MaxValue.Value)
-                                   : (decimalPlaces == 0 ? (decimal)long.MaxValue :  1e15m);
+                                   : (dp == 0 ? (decimal)long.MaxValue :  1e15m);
             overlayNumeric.Increment = entry.StepValue.HasValue ? (decimal)entry.StepValue.Value : 1;
 
             _suppressSync = true;
-            if (decimal.TryParse(entry.DisplayValue, System.Globalization.NumberStyles.Any,
+            // Parse hex display values ("0x1A2B") or plain numbers
+            string rawVal = entry.DisplayValue ?? "0";
+            if (isHex && rawVal.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                rawVal = ((long)Convert.ToUInt64(rawVal.Substring(2), 16)).ToString();
+            if (decimal.TryParse(rawVal, System.Globalization.NumberStyles.Any,
                                  System.Globalization.CultureInfo.InvariantCulture, out decimal v))
                 overlayNumeric.Value = Math.Max(overlayNumeric.Minimum, Math.Min(overlayNumeric.Maximum, v));
             _suppressSync = false;
 
-            bool hasLimits = entry.MinValue.HasValue && entry.MaxValue.HasValue;
+            bool hasLimits = entry.MinValue.HasValue && entry.MaxValue.HasValue &&
+                             entry.MaxValue.Value > entry.MinValue.Value;
             int panelH = bounds.Height;
             if (hasLimits)
             {
-                double range = entry.MaxValue!.Value - entry.MinValue!.Value;
-                int tick = range > 0 ? (int)(((double)overlayNumeric.Value - entry.MinValue.Value) / range * 1000) : 0;
+                int tick = ComputeTick(entry, (double)overlayNumeric.Value);
                 _suppressSync = true;
                 overlayTrackBar.Value = Math.Max(0, Math.Min(1000, tick));
                 _suppressSync = false;
@@ -565,6 +608,31 @@ namespace Bonsai.GenICam
             overlayNumericPanel.Visible = true;
             overlayNumericPanel.BringToFront();
             overlayNumeric.Focus();
+        }
+
+        // Convert a value to a 0-1000 trackbar tick, respecting log scale.
+        private int ComputeTick(FeatureDisplayEntry entry, double val)
+        {
+            double min = entry.MinValue!.Value, max = entry.MaxValue!.Value;
+            if (entry.Representation == Logarithmic && min > 0 && max > 0)
+            {
+                double logMin = Math.Log10(min), logMax = Math.Log10(max);
+                double logVal = Math.Log10(Math.Max(min, Math.Max(double.Epsilon, val)));
+                return (int)((logVal - logMin) / (logMax - logMin) * 1000);
+            }
+            return (int)((val - min) / (max - min) * 1000);
+        }
+
+        // Convert a 0-1000 trackbar tick back to a value, respecting log scale.
+        private double TickToValue(FeatureDisplayEntry entry, int tick)
+        {
+            double min = entry.MinValue!.Value, max = entry.MaxValue!.Value;
+            if (entry.Representation == Logarithmic && min > 0 && max > 0)
+            {
+                double logMin = Math.Log10(min), logMax = Math.Log10(max);
+                return Math.Pow(10, logMin + (tick / 1000.0) * (logMax - logMin));
+            }
+            return min + (tick / 1000.0) * (max - min);
         }
 
         private void HideOverlays()
@@ -584,11 +652,15 @@ namespace Bonsai.GenICam
         private void CommitNumericValue()
         {
             if (_overlayEntry == null) return;
-            string val = overlayNumeric.DecimalPlaces == 0
-                ? ((long)overlayNumeric.Value).ToString()
+            long intVal = (long)overlayNumeric.Value;
+            // Write always uses plain decimal integer or float string — the device does not accept "0x…"
+            string writeVal = overlayNumeric.DecimalPlaces == 0
+                ? intVal.ToString()
                 : overlayNumeric.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            _overlayEntry.DisplayValue = val;
-            WriteLiveOrDesign(_overlayEntry, val);
+            _overlayEntry.DisplayValue = _overlayEntry.Representation == HexNumber
+                ? $"0x{intVal:X}"
+                : writeVal;
+            WriteLiveOrDesign(_overlayEntry, writeVal);
         }
 
         private void WriteLiveOrDesign(FeatureDisplayEntry entry, string value)
@@ -607,7 +679,7 @@ namespace Bonsai.GenICam
             {
                 map.Write(entry.Name, value);
                 var confirmed = map.Read(entry.Name);
-                entry.DisplayValue = FeatureDisplayEntry.ValueToString(confirmed.Value);
+                entry.DisplayValue = FeatureDisplayEntry.ValueToString(confirmed.Value, entry.Representation);
                 Configuration.SetOverride(entry.Name, entry.DisplayValue ?? value);
                 entry.Overridden = true;
                 int ri = FindRowIndex(entry);
@@ -658,9 +730,8 @@ namespace Bonsai.GenICam
         {
             if (_suppressSync || _overlayEntry == null || !overlayTrackBar.Visible) return;
             if (!_overlayEntry.MinValue.HasValue || !_overlayEntry.MaxValue.HasValue) return;
-            double range = _overlayEntry.MaxValue.Value - _overlayEntry.MinValue.Value;
-            if (range <= 0) return;
-            int tick = (int)(((double)overlayNumeric.Value - _overlayEntry.MinValue.Value) / range * 1000);
+            if (_overlayEntry.MaxValue.Value <= _overlayEntry.MinValue.Value) return;
+            int tick = ComputeTick(_overlayEntry, (double)overlayNumeric.Value);
             _suppressSync = true;
             overlayTrackBar.Value = Math.Max(0, Math.Min(1000, tick));
             _suppressSync = false;
@@ -670,9 +741,8 @@ namespace Bonsai.GenICam
         {
             if (_suppressSync || _overlayEntry == null) return;
             if (!_overlayEntry.MinValue.HasValue || !_overlayEntry.MaxValue.HasValue) return;
-            double range = _overlayEntry.MaxValue.Value - _overlayEntry.MinValue.Value;
-            if (range <= 0) return;
-            double val = _overlayEntry.MinValue.Value + (overlayTrackBar.Value / 1000.0) * range;
+            if (_overlayEntry.MaxValue.Value <= _overlayEntry.MinValue.Value) return;
+            double val = TickToValue(_overlayEntry, overlayTrackBar.Value);
             if (overlayNumeric.DecimalPlaces == 0) val = Math.Round(val);
             _suppressSync = true;
             overlayNumeric.Value = Math.Max(overlayNumeric.Minimum, Math.Min(overlayNumeric.Maximum, (decimal)val));

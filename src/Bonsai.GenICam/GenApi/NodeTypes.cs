@@ -4,12 +4,17 @@ using System.Collections.Generic;
 namespace Bonsai.GenICam.GenApi
 {
     internal enum NodeAccessMode { NI, NA, WO, RO, RW }
+    internal enum NodeVisibility { Beginner, Expert, Guru, Invisible }
+    internal enum NodeRepresentation { Linear, Logarithmic, Boolean, PureNumber, HexNumber, IPV4Address, MACAddress }
+    internal enum NodeDisplayNotation { Automatic, Fixed, Exponential }
 
     internal abstract class NodeBase
     {
         public string Name { get; set; } = string.Empty;
         public NodeAccessMode AccessMode { get; set; } = NodeAccessMode.RW;
         public string? Description { get; set; }
+        public string? ToolTip { get; set; }
+        public NodeVisibility Visibility { get; set; } = NodeVisibility.Beginner;
     }
 
     // Direct register nodes (hold the actual address + length)
@@ -54,6 +59,10 @@ namespace Bonsai.GenICam.GenApi
         public string? PMin { get; set; }
         public string? PMax { get; set; }
         public string? PInc { get; set; }
+        public string? Unit { get; set; }
+        public NodeRepresentation Representation { get; set; } = NodeRepresentation.PureNumber;
+        public NodeDisplayNotation DisplayNotation { get; set; } = NodeDisplayNotation.Automatic;
+        public int? DisplayPrecision { get; set; }
     }
 
     internal class FloatNode : NodeBase
@@ -63,6 +72,10 @@ namespace Bonsai.GenICam.GenApi
         public double? LiteralMax { get; set; }
         public string? PMin { get; set; }
         public string? PMax { get; set; }
+        public string? Unit { get; set; }
+        public NodeRepresentation Representation { get; set; } = NodeRepresentation.Linear;
+        public NodeDisplayNotation DisplayNotation { get; set; } = NodeDisplayNotation.Automatic;
+        public int? DisplayPrecision { get; set; }
     }
 
     internal class StringNode : NodeBase
