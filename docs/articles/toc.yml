@@ -4,5 +4,7 @@
   href: LocalBuildRun.md
 - name: Running the LocalGenTLUnitTest
   href: LocalGenTLUnitTest.md
+- name: Architecture
+  href: Architecture.md
 - name: Comparison with Other Camera Packages
   href: comparison.md
