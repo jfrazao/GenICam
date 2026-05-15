@@ -37,11 +37,37 @@
       <Expression xsi:type="MemberSelector">
         <Selector>Model</Selector>
       </Expression>
+      <Expression xsi:type="MemberSelector">
+        <Selector>SerialNumber</Selector>
+      </Expression>
+      <Expression xsi:type="Disable">
+        <Builder xsi:type="Combinator">
+          <Combinator xsi:type="p1:GetFeatureNode">
+            <p1:DeviceIndex>0</p1:DeviceIndex>
+            <p1:FeatureName>AutofeatureAvailableReg</p1:FeatureName>
+            <p1:PeriodMs>1000</p1:PeriodMs>
+          </Combinator>
+        </Builder>
+      </Expression>
+      <Expression xsi:type="Disable">
+        <Builder xsi:type="Combinator">
+          <Combinator xsi:type="rx:Timer">
+            <rx:DueTime>PT10S</rx:DueTime>
+          </Combinator>
+        </Builder>
+      </Expression>
+      <Expression xsi:type="Disable">
+        <Builder xsi:type="Combinator">
+          <Combinator xsi:type="rx:SubscribeWhen" />
+        </Builder>
+      </Expression>
       <Expression xsi:type="Combinator">
         <Combinator xsi:type="p1:GenICamCapture">
+          <p1:ProducerPath />
           <p1:DeviceIndex>0</p1:DeviceIndex>
           <p1:NumBuffers>4</p1:NumBuffers>
           <p1:FrameTimeoutMs>5000</p1:FrameTimeoutMs>
+          <p1:Features />
         </Combinator>
       </Expression>
     </Nodes>
@@ -50,6 +76,9 @@
       <Edge From="2" To="3" Label="Source1" />
       <Edge From="4" To="5" Label="Source1" />
       <Edge From="5" To="6" Label="Source1" />
+      <Edge From="5" To="7" Label="Source1" />
+      <Edge From="8" To="10" Label="Source1" />
+      <Edge From="9" To="10" Label="Source2" />
     </Edges>
   </Workflow>
 </WorkflowBuilder>

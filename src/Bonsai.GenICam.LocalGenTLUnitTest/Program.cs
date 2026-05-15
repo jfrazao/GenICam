@@ -9,15 +9,29 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
     {
         static void Main(string[] args)
         {
-            int targetIndex = args.Length > 0 ? int.Parse(args[0]) : 1;
+            // Usage: [producerPath] [deviceIndex]
+            // producerPath — path to a .cti file; omit to scan GENICAM_GENTL64_PATH
+            // deviceIndex  — defaults to 0 when a producer path is given, 1 otherwise
+            string? producerPath = null;
+            int targetIndex;
+            if (args.Length > 0 && args[0].EndsWith(".cti", StringComparison.OrdinalIgnoreCase))
+            {
+                producerPath = args[0];
+                targetIndex  = args.Length > 1 ? int.Parse(args[1]) : 0;
+            }
+            else
+            {
+                targetIndex = args.Length > 0 ? int.Parse(args[0]) : 1;
+            }
 
             Console.WriteLine("=== Bonsai.GenICam Test ===");
             Console.WriteLine();
 
             // --- Enumerate ---
             Console.WriteLine("Enumerating GenICam devices...");
+            Console.WriteLine(producerPath != null ? $"Producer: {producerPath}" : "Producer: (GENICAM_GENTL64_PATH)");
             DeviceInfo[]? devices = null;
-            try { devices = new EnumerateDevices().Generate().Wait(); }
+            try { devices = new EnumerateDevices { ProducerPath = producerPath }.Generate().Wait(); }
             catch (Exception ex) { Console.WriteLine($"Enumeration failed: {ex.Message}"); Environment.Exit(1); return; }
 
             Console.WriteLine($"Found {devices.Length} device(s):");
@@ -42,7 +56,7 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                 Console.WriteLine($"--- Camera {i}: {devices[i].Vendor} {devices[i].Model} (S/N: {devices[i].SerialNumber}) ---");
                 try
                 {
-                    string xml = GenICamXmlExtractor.ExtractXml(null, i);
+                    string xml = GenICamXmlExtractor.ExtractXml(producerPath, i);
                     Console.WriteLine($"XML length: {xml.Length} bytes");
                     
                     // Save to file
@@ -64,7 +78,7 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             Console.WriteLine($"All readable features of device {targetIndex}:");
             try
             {
-                var features = new ListFeatureValues { DeviceIndex = targetIndex }.Generate().Wait();
+                var features = new ListFeatureValues { ProducerPath = producerPath, DeviceIndex = targetIndex }.Generate().Wait();
                 foreach (var f in features)
                     Console.WriteLine($"  {f.Name} = {f.Value}");
             }
@@ -75,7 +89,7 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             Console.WriteLine("=== Write/Readback round-trip test (ExposureTime, Gain) ===");
             try
             {
-                var results = FeatureRoundTripTester.Run(null, targetIndex, new[] { "ExposureTime", "Gain" });
+                var results = FeatureRoundTripTester.Run(producerPath, targetIndex, new[] { "ExposureTime", "Gain" });
                 foreach (var r in results)
                 {
                     Console.WriteLine($"  {r.Name}:");
@@ -92,7 +106,7 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
 
             // --- Capture ---
             Console.WriteLine($"Capturing 5 frames from device {targetIndex}...");
-            var capture = new GenICamCapture { DeviceIndex = targetIndex, NumBuffers = 4, FrameTimeoutMs = 5000 };
+            var capture = new GenICamCapture { ProducerPath = producerPath, DeviceIndex = targetIndex, NumBuffers = 4, FrameTimeoutMs = 5000 };
 
             int frameCount = 0;
             var done = new ManualResetEventSlim(false);
