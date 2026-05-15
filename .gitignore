@@ -19,10 +19,10 @@ packages/
 /artifacts/
 
 # Bonsai local environment (executables, downloaded packages, editor state)
-.bonsai/Packages/
-.bonsai/*.exe
-.bonsai/*.exe.*
-.bonsai/Settings/
+**/.bonsai/Packages/
+**/.bonsai/*.exe
+**/.bonsai/*.exe.*
+**/.bonsai/Settings/
 
 # Bonsai workflow layout files (window positions, visualizer state)
 workflows/*.layout
