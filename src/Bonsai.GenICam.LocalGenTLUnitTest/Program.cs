@@ -3,7 +3,7 @@ using System.Reactive.Linq;
 using System.Threading;
 using Bonsai.GenICam;
 
-namespace Bonsai.GenICam.TestApp
+namespace Bonsai.GenICam.LocalGenTLUnitTest
 {
     class Program
     {

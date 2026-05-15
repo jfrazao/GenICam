@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-      <_Parameter1>Bonsai.GenICam.TestApp</_Parameter1>
+      <_Parameter1>Bonsai.GenICam.LocalGenTLUnitTest</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
 

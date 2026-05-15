@@ -13,7 +13,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bonsai.GenICam", "src\Bonsai.GenICam\Bonsai.GenICam.csproj", "{59124FC1-788D-478B-8F26-F3B65D6D9A79}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bonsai.GenICam.TestApp", "src\Bonsai.GenICam.TestApp\Bonsai.GenICam.TestApp.csproj", "{2275E682-FDFC-413C-A168-1E4C707AAAA3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bonsai.GenICam.LocalGenTLUnitTest", "src\Bonsai.GenICam.LocalGenTLUnitTest\Bonsai.GenICam.LocalGenTLUnitTest.csproj", "{2275E682-FDFC-413C-A168-1E4C707AAAA3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

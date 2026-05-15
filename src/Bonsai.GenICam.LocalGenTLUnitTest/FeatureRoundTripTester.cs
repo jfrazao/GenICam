@@ -4,7 +4,7 @@ using Bonsai.GenICam;
 using Bonsai.GenICam.GenApi;
 using Bonsai.GenICam.GenTL;
 
-namespace Bonsai.GenICam.TestApp
+namespace Bonsai.GenICam.LocalGenTLUnitTest
 {
     class FeatureRoundTripResult
     {

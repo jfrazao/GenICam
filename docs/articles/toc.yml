@@ -1,4 +1,8 @@
 - name: Introduction
   href: ../index.md
+- name: Local Build and Run
+  href: LocalBuildRun.md
+- name: Running the LocalGenTLUnitTest
+  href: LocalGenTLUnitTest.md
 - name: Comparison with Other Camera Packages
   href: comparison.md
