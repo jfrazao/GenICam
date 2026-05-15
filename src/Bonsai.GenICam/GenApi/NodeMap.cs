@@ -314,7 +314,30 @@ namespace Bonsai.GenICam.GenApi
 
         internal bool CanWrite(string name)
         {
-            var node = Resolve(name);
+            if (!_nodes.TryGetValue(name, out var node)) return false;
+            return EffectiveWritable(node);
+        }
+
+        // Traverses the pValue chain to the terminal register node so that a logical
+        // node with no <AccessMode> (which defaults to RW) does not appear writable
+        // when its backing register declares RO — e.g. DeviceTemperature.
+        private bool EffectiveWritable(NodeBase node)
+        {
+            if (node.AccessMode == NodeAccessMode.RO || node.AccessMode == NodeAccessMode.NA)
+                return false;
+            // Terminal register nodes: their AccessMode is authoritative
+            if (node is IntRegNode || node is FloatRegNode || node is StringRegNode || node is MaskedIntRegNode)
+                return node.AccessMode == NodeAccessMode.RW || node.AccessMode == NodeAccessMode.WO;
+            // Formula-only nodes are always read-only
+            if (node is IntSwissKnifeNode || node is SwissKnifeNode)
+                return false;
+            // Chain nodes: follow pValue to the terminal
+            string? pv = NodePValue(node);
+            if (pv != null)
+            {
+                try { return EffectiveWritable(Resolve(pv)); }
+                catch { return false; }
+            }
             return node.AccessMode == NodeAccessMode.RW || node.AccessMode == NodeAccessMode.WO;
         }
 
@@ -422,6 +445,9 @@ namespace Bonsai.GenICam.GenApi
             IntegerNode n      => n.ConstantValue.HasValue ? null : n.PValue,
             ConverterNode n    => n.PValue,
             IntConverterNode n => n.PValue,
+            EnumerationNode n  => n.PValue,
+            BooleanNode n      => n.PValue,
+            StringNode n       => n.PValue,
             _                  => null
         };
 
