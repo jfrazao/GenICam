@@ -97,7 +97,9 @@ namespace Bonsai.GenICam.GenApi
                     ulong mask; int shift;
                     if (bitStr != null)
                     {
-                        int bit = int.Parse(bitStr.Trim());
+                        string bitTrimmed = bitStr.Trim();
+                        int bit = bitTrimmed.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                            ? (int)Convert.ToUInt32(bitTrimmed, 16) : int.Parse(bitTrimmed);
                         mask = 1UL << bit; shift = bit;
                     }
                     else
@@ -947,13 +949,18 @@ namespace Bonsai.GenICam.GenApi
         private static int ParseInt(XElement el, XNamespace ns, string localName, int defaultValue)
         {
             string val = (string)el.Element(ns + localName);
-            return val == null ? defaultValue : int.Parse(val);
+            if (val == null) return defaultValue;
+            val = val.Trim();
+            return val.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                ? (int)Convert.ToUInt32(val, 16)
+                : int.Parse(val);
         }
 
         private static long ParseLong(XElement el, XNamespace ns, string localName, long defaultValue)
         {
             string val = (string)el.Element(ns + localName);
             if (val == null) return defaultValue;
+            val = val.Trim();
             return val.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
                 ? (long)Convert.ToUInt64(val, 16)
                 : long.Parse(val);
@@ -963,6 +970,7 @@ namespace Bonsai.GenICam.GenApi
         {
             string val = (string)el.Element(ns + localName);
             if (val == null) return defaultValue;
+            val = val.Trim();
             return val.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
                 ? Convert.ToUInt64(val, 16)
                 : ulong.Parse(val);
