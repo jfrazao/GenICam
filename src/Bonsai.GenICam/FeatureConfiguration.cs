@@ -258,9 +258,9 @@ namespace Bonsai.GenICam
             };
             buttonPanel.Controls.Add(closeButton);
             buttonPanel.Controls.Add(refreshButton);
-            // Visibility label+combo appear on the left side (added last in RightToLeft flow)
-            buttonPanel.Controls.Add(new Label { Text = "Show:", AutoSize = true, Padding = new Padding(4, 6, 2, 0) });
+            // In RightToLeft flow, last-added controls appear leftmost; add combo before label
             buttonPanel.Controls.Add(visibilityCombo);
+            buttonPanel.Controls.Add(new Label { Text = "Show:", AutoSize = true, Padding = new Padding(4, 6, 2, 0) });
 
             categoryList = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
             categoryList.SelectedIndexChanged += CategoryList_SelectedIndexChanged;

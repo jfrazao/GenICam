@@ -57,16 +57,23 @@ At workflow start, the device is selected in this order:
 
 The `Features` property stores a flat list of named feature values. Open the editor by clicking `...` on the property.
 
-**Storage** — serialized as `<Feature>` elements inside the workflow `.bonsai` file:
+**Storage** — serialized as `<Feature>` elements inside the workflow `.bonsai` file alongside `CameraModel`:
 
 ```xml
-<Features>
-  <Feature name="ExposureTime" value="10000" />
-  <Feature name="Gain" value="0" />
-</Features>
+<p1:CameraModel>IDS UI-3220CP-M</p1:CameraModel>
+<p1:Features>
+  <p1:Feature name="ExposureTime" value="10000" />
+  <p1:Feature name="Gain" value="0" />
+</p1:Features>
 ```
 
 Persisted by Bonsai's normal **Save workflow** (Ctrl+S).
+
+**Automatic reset on camera identity change** — the override list is cleared automatically when the camera selection changes in a way that implies a different model:
+
+- **`CameraModel` changes** — always resets (different model, different feature set)
+- **`DeviceIndex` or `SerialNumber` changes with no `CameraModel` set** — resets (global index / serial with no model filter, new camera could be a different model)
+- **`DeviceIndex` or `SerialNumber` changes while `CameraModel` is set** — no reset (index/serial refine the unit within the same model group; feature set is unchanged)
 
 **In the editor**
 

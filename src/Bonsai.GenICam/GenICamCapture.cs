@@ -41,7 +41,15 @@ namespace Bonsai.GenICam
         public int DeviceIndex
         {
             get => _deviceIndex;
-            set { if (_deviceIndex == value) return; _deviceIndex = value; NotifyIdentityChanged(); }
+            set
+            {
+                if (_deviceIndex == value) return;
+                _deviceIndex = value;
+                // No model filter means global index — any change may land on a different model.
+                if (_cameraModel == null && Features.Overrides.Count > 0)
+                    Features = new FeatureConfiguration();
+                NotifyIdentityChanged();
+            }
         }
 
         [Description("Optional: select camera by vendor+model string (e.g. 'Basler Blackfly S BFS-U3-16S2M'). Leave empty to select by DeviceIndex only.")]
@@ -54,6 +62,7 @@ namespace Bonsai.GenICam
                 var v = string.IsNullOrWhiteSpace(value) ? null : value;
                 if (_cameraModel == v) return;
                 _cameraModel = v;
+                Features = new FeatureConfiguration();
                 NotifyIdentityChanged();
             }
         }
@@ -68,6 +77,8 @@ namespace Bonsai.GenICam
                 var v = string.IsNullOrWhiteSpace(value) ? null : value;
                 if (_serialNumber == v) return;
                 _serialNumber = v;
+                if (_cameraModel == null && Features.Overrides.Count > 0)
+                    Features = new FeatureConfiguration();
                 NotifyIdentityChanged();
             }
         }
