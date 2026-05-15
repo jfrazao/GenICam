@@ -461,6 +461,16 @@ namespace Bonsai.GenICam.GenApi
             }
             if (node is FloatNode f)
             {
+                // Read pMin/pMax directly if declared on the Float node — they are already in user units.
+                //
+                // FLIR (Blackfly S): Float.pMin/pMax → SwissKnife (Formula: RAW, trivial passthrough) → IntReg.
+                //   The backing Converter is also trivial (FormulaTo: FROM). Limits arrive here in µs.
+                //
+                // IDS (UI322xCP-M): Float.pMin/pMax → SwissKnife (Formula: MS/1000) → IntReg.
+                //   The SwissKnife converts the raw register to µs independently of the Converter.
+                //   Even when the Converter's FormulaTo/FormulaFrom are inverted on some IDS firmware
+                //   versions (requiring the swap detected in ReadNode/WriteNode), the SwissKnife still
+                //   produces correct µs limits — so limits are always right here regardless.
                 double? min = f.LiteralMin.HasValue ? (double?)f.LiteralMin.Value : (f.PMin != null ? TryReadRef(f.PMin) : null);
                 double? max = f.LiteralMax.HasValue ? (double?)f.LiteralMax.Value : (f.PMax != null ? TryReadRef(f.PMax) : null);
                 if (f.PValue != null)
@@ -468,9 +478,48 @@ namespace Bonsai.GenICam.GenApi
                     try
                     {
                         var next = Resolve(f.PValue);
-                        // Don't propagate through converters — their backing limits are in a different unit space.
-                        if (!(next is ConverterNode) && !(next is IntConverterNode))
+                        if (next is ConverterNode || next is IntConverterNode)
                         {
+                            // HikRobot (MV-CA013): Float declares no pMin/pMax. Limits live on the
+                            // Integer node that backs the Converter, in raw register units (ADC counts,
+                            // raw ticks, etc.). Apply FormulaTo with resolved pVariables to convert
+                            // them to user units (µs, dB, …).
+                            // FLIR/IDS skip this block because their pMin/pMax are already set above.
+                            if (!min.HasValue || !max.HasValue)
+                            {
+                                string? cvPValue;
+                                string cvFTo;
+                                Dictionary<string, string> cvVars;
+                                if (next is ConverterNode cvC)
+                                { cvPValue = cvC.PValue; cvFTo = cvC.FormulaTo ?? "FROM"; cvVars = cvC.Variables; }
+                                else
+                                { var icv = (IntConverterNode)next; cvPValue = icv.PValue; cvFTo = icv.FormulaTo ?? "FROM"; cvVars = icv.Variables; }
+                                if (cvPValue != null)
+                                {
+                                    try
+                                    {
+                                        var (rawMin, rawMax, _) = EffectiveLimits(Resolve(cvPValue));
+                                        if (!min.HasValue && rawMin.HasValue)
+                                        {
+                                            var fv = ResolveConverterVars(cvVars); fv["FROM"] = rawMin.Value;
+                                            try { min = EvaluateFormula(cvFTo, fv); } catch { }
+                                        }
+                                        if (!max.HasValue && rawMax.HasValue)
+                                        {
+                                            var fv = ResolveConverterVars(cvVars); fv["FROM"] = rawMax.Value;
+                                            try { max = EvaluateFormula(cvFTo, fv); } catch { }
+                                        }
+                                        // FormulaTo may be monotonically decreasing — ensure min <= max.
+                                        if (min.HasValue && max.HasValue && min.Value > max.Value)
+                                        { (min, max) = (max, min); }
+                                    }
+                                    catch { }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // No unit-conversion layer — recurse directly to find limits on the backing node.
                             var (bMin, bMax, bStep) = EffectiveLimits(next);
                             if (!min.HasValue) min = bMin;
                             if (!max.HasValue) max = bMax;
