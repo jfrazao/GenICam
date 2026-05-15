@@ -93,15 +93,26 @@ namespace Bonsai.GenICam
             Writable = writable;
         }
 
-        internal static string? ValueToString(object? value, NodeRepresentation rep = NodeRepresentation.Linear)
+        internal static string? ValueToString(object? value, NodeRepresentation rep = NodeRepresentation.Linear, int decimalPlaces = -1)
         {
             if (rep == NodeRepresentation.HexNumber)
             {
                 if (value is long l)   return $"0x{l:X}";
                 if (value is int i)    return $"0x{i:X}";
+                if (value is double dh) return $"0x{(long)Math.Round(dh):X}";
             }
-            if (value is double d) return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            if (value is float f)  return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (value is double d)
+            {
+                if (decimalPlaces == 0) return ((long)Math.Round(d)).ToString();
+                if (decimalPlaces > 0)  return Math.Round(d, decimalPlaces).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (value is float f)
+            {
+                if (decimalPlaces == 0) return ((long)Math.Round(f)).ToString();
+                if (decimalPlaces > 0)  return Math.Round(f, decimalPlaces).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
             return value?.ToString();
         }
     }
@@ -379,7 +390,7 @@ namespace Bonsai.GenICam
                 { var lim = map.GetNodeLimits(fv.Name); min = lim.min; max = lim.max; step = lim.step; }
                 int dp = kind == FeatureKind.Integer ? 0 : (map.GetNodeDisplayPrecision(fv.Name) ?? 6);
 
-                var entry = new FeatureDisplayEntry(fv.Name, FeatureDisplayEntry.ValueToString(fv.Value, rep), writable)
+                var entry = new FeatureDisplayEntry(fv.Name, FeatureDisplayEntry.ValueToString(fv.Value, rep, dp), writable)
                 {
                     Category = category, Description = map.GetNodeDescription(fv.Name),
                     Kind = kind, Visibility = vis, Representation = rep, Unit = unit,
@@ -679,7 +690,7 @@ namespace Bonsai.GenICam
             {
                 map.Write(entry.Name, value);
                 var confirmed = map.Read(entry.Name);
-                entry.DisplayValue = FeatureDisplayEntry.ValueToString(confirmed.Value, entry.Representation);
+                entry.DisplayValue = FeatureDisplayEntry.ValueToString(confirmed.Value, entry.Representation, entry.DecimalPlaces);
                 Configuration.SetOverride(entry.Name, entry.DisplayValue ?? value);
                 entry.Overridden = true;
                 int ri = FindRowIndex(entry);

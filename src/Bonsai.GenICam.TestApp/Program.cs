@@ -71,6 +71,25 @@ namespace Bonsai.GenICam.TestApp
             catch (Exception ex) { Console.WriteLine($"  ListFeatureValues failed: {ex.Message}"); }
             Console.WriteLine();
 
+            // --- Write/Readback round-trip test ---
+            Console.WriteLine("=== Write/Readback round-trip test (ExposureTime, Gain) ===");
+            try
+            {
+                var results = FeatureRoundTripTester.Run(null, targetIndex, new[] { "ExposureTime", "Gain" });
+                foreach (var r in results)
+                {
+                    Console.WriteLine($"  {r.Name}:");
+                    Console.WriteLine($"    Kind={r.Kind}  Rep={r.Representation}  Unit={r.Unit ?? "(none)"}");
+                    Console.WriteLine($"    Limits: min={r.LimitMin ?? "none"}  max={r.LimitMax ?? "none"}  step={r.LimitStep ?? "none"}");
+                    Console.WriteLine($"    Before: {r.ValueBefore}");
+                    Console.WriteLine($"    Written: {r.ValueWritten}");
+                    Console.WriteLine($"    Readback: {r.ValueReadBack}");
+                    Console.WriteLine($"    Error: {r.Error ?? "none"}");
+                }
+            }
+            catch (Exception ex) { Console.WriteLine($"  Round-trip test failed: {ex.Message}"); }
+            Console.WriteLine();
+
             // --- Capture ---
             Console.WriteLine($"Capturing 5 frames from device {targetIndex}...");
             var capture = new GenICamCapture { DeviceIndex = targetIndex, NumBuffers = 4, FrameTimeoutMs = 5000 };

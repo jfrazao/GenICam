@@ -120,6 +120,7 @@ namespace Bonsai.GenICam.GenApi
         public string? PValue { get; set; }
         public string? FormulaTo { get; set; }    // formula applied when reading (input → output)
         public string? FormulaFrom { get; set; }  // formula applied when writing (output → input)
+        public Dictionary<string, string> Variables { get; set; } = new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
     internal class IntConverterNode : NodeBase
@@ -127,5 +128,6 @@ namespace Bonsai.GenICam.GenApi
         public string? PValue { get; set; }
         public string? FormulaTo { get; set; }
         public string? FormulaFrom { get; set; }
+        public Dictionary<string, string> Variables { get; set; } = new Dictionary<string, string>(StringComparer.Ordinal);
     }
 }

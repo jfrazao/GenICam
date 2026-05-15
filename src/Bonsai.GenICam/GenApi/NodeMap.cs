@@ -264,24 +264,34 @@ namespace Bonsai.GenICam.GenApi
                 }
 
                 case "Converter":
+                {
+                    var vars = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var v in el.Elements(ns + "pVariable"))
+                    { string vn = (string)v.Attribute("Name"); if (vn != null) vars[vn] = v.Value.Trim(); }
                     return new ConverterNode
                     {
-                        Name = name,
-                        AccessMode = accessMode,
+                        Name = name, AccessMode = accessMode,
                         PValue = (string)el.Element(ns + "pValue"),
                         FormulaTo = (string)el.Element(ns + "FormulaTo") ?? "FROM",
-                        FormulaFrom = (string)el.Element(ns + "FormulaFrom") ?? "TO"
+                        FormulaFrom = (string)el.Element(ns + "FormulaFrom") ?? "TO",
+                        Variables = vars
                     };
+                }
 
                 case "IntConverter":
+                {
+                    var vars = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var v in el.Elements(ns + "pVariable"))
+                    { string vn = (string)v.Attribute("Name"); if (vn != null) vars[vn] = v.Value.Trim(); }
                     return new IntConverterNode
                     {
-                        Name = name,
-                        AccessMode = accessMode,
+                        Name = name, AccessMode = accessMode,
                         PValue = (string)el.Element(ns + "pValue"),
                         FormulaTo = (string)el.Element(ns + "FormulaTo") ?? "FROM",
-                        FormulaFrom = (string)el.Element(ns + "FormulaFrom") ?? "TO"
+                        FormulaFrom = (string)el.Element(ns + "FormulaFrom") ?? "TO",
+                        Variables = vars
                     };
+                }
 
                 default:
                     return null;
@@ -453,22 +463,26 @@ namespace Bonsai.GenICam.GenApi
             {
                 double? min = f.LiteralMin.HasValue ? (double?)f.LiteralMin.Value : (f.PMin != null ? TryReadRef(f.PMin) : null);
                 double? max = f.LiteralMax.HasValue ? (double?)f.LiteralMax.Value : (f.PMax != null ? TryReadRef(f.PMax) : null);
-                // Always resolve through pValue: pick up missing min/max and get step from the
-                // backing integer node (FloatNode never defines its own increment).
                 if (f.PValue != null)
                 {
                     try
                     {
-                        var (bMin, bMax, bStep) = EffectiveLimits(Resolve(f.PValue));
-                        if (!min.HasValue) min = bMin;
-                        if (!max.HasValue) max = bMax;
-                        return (min, max, bStep);
+                        var next = Resolve(f.PValue);
+                        // Don't propagate through converters — their backing limits are in a different unit space.
+                        if (!(next is ConverterNode) && !(next is IntConverterNode))
+                        {
+                            var (bMin, bMax, bStep) = EffectiveLimits(next);
+                            if (!min.HasValue) min = bMin;
+                            if (!max.HasValue) max = bMax;
+                            return (min, max, bStep);
+                        }
                     }
                     catch { }
                 }
                 return (min, max, null);
             }
-            // Walk through converter/other chain nodes to reach the backing integer node's limits
+            // Converter nodes change unit space — limits below them are meaningless in user units.
+            if (node is ConverterNode || node is IntConverterNode) return (null, null, null);
             string? pv = NodePValue(node);
             if (pv != null)
             {
@@ -515,7 +529,45 @@ namespace Bonsai.GenICam.GenApi
                 case IntegerNode n:
                     if (n.ConstantValue.HasValue) return n.ConstantValue.Value;
                     return ReadNode(ResolveRef(n.PValue));
-                case FloatNode n: return ReadNode(ResolveRef(n.PValue));
+                case FloatNode n:
+                {
+                    var inner = ResolveRef(n.PValue);
+                    // Detect inverted Converter formulas: some cameras (e.g. IDS) accidentally swap
+                    // FormulaTo/FormulaFrom. Detect by checking if the FormulaTo result lands way
+                    // outside the node's declared pMin/pMax limits, then try FormulaFrom instead.
+                    if ((inner is ConverterNode || inner is IntConverterNode) && (n.PMin != null || n.PMax != null))
+                    {
+                        string? cvPValue; string cvFTo; string cvFFrom; Dictionary<string, string> cvVars;
+                        if (inner is ConverterNode cvC)
+                        { cvPValue = cvC.PValue; cvFTo = cvC.FormulaTo ?? "FROM"; cvFFrom = cvC.FormulaFrom ?? "TO"; cvVars = cvC.Variables; }
+                        else
+                        { var icv = (IntConverterNode)inner; cvPValue = icv.PValue; cvFTo = icv.FormulaTo ?? "FROM"; cvFFrom = icv.FormulaFrom ?? "TO"; cvVars = icv.Variables; }
+                        double raw = Convert.ToDouble(ReadNode(ResolveRef(cvPValue)));
+                        var fvars = ResolveConverterVars(cvVars);
+                        fvars["FROM"] = raw;
+                        double normalResult = EvaluateFormula(cvFTo, fvars);
+                        double? limMin = null, limMax = null;
+                        if (n.PMin != null) try { limMin = Convert.ToDouble(ReadNode(Resolve(n.PMin))); } catch { }
+                        if (n.PMax != null) try { limMax = Convert.ToDouble(ReadNode(Resolve(n.PMax))); } catch { }
+                        bool outsideLimits = (limMax.HasValue && limMax.Value > 0 && normalResult > limMax.Value * 100) ||
+                                             (limMin.HasValue && limMin.Value > 0 && normalResult < limMin.Value / 100);
+                        if (outsideLimits)
+                        {
+                            var fvars2 = ResolveConverterVars(cvVars);
+                            fvars2["TO"] = raw;
+                            try
+                            {
+                                double inv = EvaluateFormula(cvFFrom, fvars2);
+                                bool inRange = (!limMin.HasValue || inv >= limMin.Value * 0.99) &&
+                                               (!limMax.HasValue || inv <= limMax.Value * 1.01);
+                                if (inRange) return inv;
+                            }
+                            catch { }
+                        }
+                        return normalResult;
+                    }
+                    return ReadNode(inner);
+                }
                 case StringNode n: return ReadNode(ResolveRef(n.PValue));
                 case BooleanNode n: return Convert.ToInt64(ReadNode(ResolveRef(n.PValue))) != 0;
                 case EnumerationNode n:
@@ -538,13 +590,15 @@ namespace Bonsai.GenICam.GenApi
                 case ConverterNode n:
                 {
                     double from = Convert.ToDouble(ReadNode(ResolveRef(n.PValue)));
-                    var vars = new Dictionary<string, double>(StringComparer.Ordinal) { ["FROM"] = from };
+                    var vars = ResolveConverterVars(n.Variables);
+                    vars["FROM"] = from;
                     return EvaluateFormula(n.FormulaTo, vars);
                 }
                 case IntConverterNode n:
                 {
                     double from = Convert.ToDouble(ReadNode(ResolveRef(n.PValue)));
-                    var vars = new Dictionary<string, double>(StringComparer.Ordinal) { ["FROM"] = from };
+                    var vars = ResolveConverterVars(n.Variables);
+                    vars["FROM"] = from;
                     return (long)EvaluateFormula(n.FormulaTo, vars);
                 }
                 default:
@@ -557,10 +611,10 @@ namespace Bonsai.GenICam.GenApi
             switch (node)
             {
                 case MaskedIntRegNode r:
-                    WriteMaskedIntReg(r, long.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture));
+                    WriteMaskedIntReg(r, (long)double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture));
                     break;
                 case IntRegNode r:
-                    WriteIntReg(r, long.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture));
+                    WriteIntReg(r, (long)double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture));
                     break;
                 case FloatRegNode r:
                     WriteFloatReg(r, double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture));
@@ -574,8 +628,45 @@ namespace Bonsai.GenICam.GenApi
                     WriteNode(ResolveRef(n.PValue), valueStr);
                     break;
                 case FloatNode n:
-                    WriteNode(ResolveRef(n.PValue), valueStr);
+                {
+                    var inner = ResolveRef(n.PValue);
+                    if ((inner is ConverterNode || inner is IntConverterNode) && (n.PMin != null || n.PMax != null))
+                    {
+                        string? cvPValue; string cvFTo; string cvFFrom; Dictionary<string, string> cvVars;
+                        if (inner is ConverterNode cvC)
+                        { cvPValue = cvC.PValue; cvFTo = cvC.FormulaTo ?? "FROM"; cvFFrom = cvC.FormulaFrom ?? "TO"; cvVars = cvC.Variables; }
+                        else
+                        { var icv = (IntConverterNode)inner; cvPValue = icv.PValue; cvFTo = icv.FormulaTo ?? "FROM"; cvFFrom = icv.FormulaFrom ?? "TO"; cvVars = icv.Variables; }
+                        double? limMin = null, limMax = null;
+                        if (n.PMin != null) try { limMin = Convert.ToDouble(ReadNode(Resolve(n.PMin))); } catch { }
+                        if (n.PMax != null) try { limMax = Convert.ToDouble(ReadNode(Resolve(n.PMax))); } catch { }
+                        bool isInverted = false;
+                        if (limMin.HasValue || limMax.HasValue)
+                        {
+                            double curRaw = Convert.ToDouble(ReadNode(ResolveRef(cvPValue)));
+                            var rvars = ResolveConverterVars(cvVars);
+                            rvars["FROM"] = curRaw;
+                            double curNormal = EvaluateFormula(cvFTo, rvars);
+                            isInverted = (limMax.HasValue && limMax.Value > 0 && curNormal > limMax.Value * 100) ||
+                                         (limMin.HasValue && limMin.Value > 0 && curNormal < limMin.Value / 100);
+                        }
+                        double userVal = double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture);
+                        var wvars = ResolveConverterVars(cvVars);
+                        double rawToWrite;
+                        if (isInverted)
+                        { wvars["FROM"] = userVal; rawToWrite = EvaluateFormula(cvFTo, wvars); }
+                        else
+                        { wvars["TO"] = userVal; rawToWrite = EvaluateFormula(cvFFrom, wvars); }
+                        bool isIntConverter = inner is IntConverterNode;
+                        string rawStr = isIntConverter
+                            ? ((long)rawToWrite).ToString()
+                            : rawToWrite.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        WriteNode(ResolveRef(cvPValue), rawStr);
+                        break;
+                    }
+                    WriteNode(inner, valueStr);
                     break;
+                }
                 case StringNode n:
                     WriteNode(ResolveRef(n.PValue), valueStr);
                     break;
@@ -603,7 +694,8 @@ namespace Bonsai.GenICam.GenApi
                 case ConverterNode n:
                 {
                     double to = double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture);
-                    var vars = new Dictionary<string, double>(StringComparer.Ordinal) { ["TO"] = to };
+                    var vars = ResolveConverterVars(n.Variables);
+                    vars["TO"] = to;
                     double raw = EvaluateFormula(n.FormulaFrom, vars);
                     WriteNode(ResolveRef(n.PValue), raw.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     break;
@@ -611,7 +703,8 @@ namespace Bonsai.GenICam.GenApi
                 case IntConverterNode n:
                 {
                     double to = double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture);
-                    var vars = new Dictionary<string, double>(StringComparer.Ordinal) { ["TO"] = to };
+                    var vars = ResolveConverterVars(n.Variables);
+                    vars["TO"] = to;
                     long raw = (long)EvaluateFormula(n.FormulaFrom, vars);
                     WriteNode(ResolveRef(n.PValue), raw.ToString());
                     break;
@@ -854,6 +947,18 @@ namespace Bonsai.GenICam.GenApi
         }
 
         // ---- formula evaluation ----
+
+        // Resolves pVariable references for Converter/IntConverter nodes.
+        private Dictionary<string, double> ResolveConverterVars(Dictionary<string, string> variables)
+        {
+            var result = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var kv in variables)
+            {
+                if (_nodes.TryGetValue(kv.Value, out var refNode))
+                    try { result[kv.Key] = Convert.ToDouble(ReadNode(refNode)); } catch { }
+            }
+            return result;
+        }
 
         private Dictionary<string, double> ResolveFormulaVars(Dictionary<string, string> variables)
         {

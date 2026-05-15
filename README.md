@@ -108,7 +108,8 @@ dotnet build src/Bonsai.GenICam.TestApp/Bonsai.GenICam.TestApp.csproj -c Release
 1. **Enumerates** all GenTL cameras and prints vendor/model/serial — verifies producer loading and device discovery
 2. **Extracts GenICam XML** from every detected camera and saves each file to `example-camera-xml/` next to the exe — verifies `GCReadPort` and XML parsing
 3. **Lists all readable features** for the target device — verifies the GenAPI NodeMap across all node types
-4. **Captures 5 frames** from the target device and prints dimensions — verifies the buffer acquisition loop and `IplImage` construction
+4. **Write/readback round-trip test** for `ExposureTime` and `Gain` — writes a test value, reads it back, then restores the original; verifies Converter formula evaluation and the write path
+5. **Captures 5 frames** from the target device and prints dimensions — verifies the buffer acquisition loop and `IplImage` construction
 
 Running it successfully end-to-end confirms that GenTL producer loading, device enumeration, feature access, and image acquisition all work with your camera and driver.
 
@@ -162,7 +163,7 @@ Two implementation layers:
 
 **GenTL runtime loader** (`src/Bonsai.GenICam/GenTL/`) — Pure C# dynamic P/Invoke. Scans `GENICAM_GENTL64_PATH` for `.cti` producer files, loads them with `LoadLibrary`/`GetProcAddress`, and wraps the GenTL module hierarchy (System → Interface → Device → DataStream → Buffer).
 
-**GenAPI NodeMap** (`src/Bonsai.GenICam/GenApi/`) — Fetches the device XML via `GCReadPort`, parses it, and exposes named feature nodes. Supports the six node types covering ~95% of real-world devices: Integer, Float, String, Boolean, Enumeration, Command.
+**GenAPI NodeMap** (`src/Bonsai.GenICam/GenApi/`) — Fetches the device XML via `GCReadPort`, parses it, and exposes named feature nodes. Supports Integer, Float, String, Boolean, Enumeration, Command, Converter, IntConverter, MaskedIntReg, IntSwissKnife, and SwissKnife node types. Converter and IntConverter nodes resolve `<pVariable>` references and evaluate `FormulaTo`/`FormulaFrom` expressions with full formula arithmetic.
 
 ## Project Structure
 
@@ -186,6 +187,7 @@ src/Bonsai.GenICam/
 ├── SetFeatureNode.cs           # Combinator — writes a named feature + passthrough
 ├── ListFeatureValues.cs        # Source<FeatureValue[]> — reads all readable features
 ├── FeatureConfiguration.cs     # FeatureOverride list, editor form, UITypeEditors
+├── FeatureRoundTripTester.cs   # Diagnostic: write/readback test for named features
 ├── GenICamXmlExtractor.cs      # Static helper — fetches raw GenICam XML from a device
 │
 ├── DeviceInfo.cs               # Struct: index, vendor, model, serial, TL type
@@ -204,8 +206,10 @@ src/Bonsai.GenICam/
 │
 └── GenApi/
     ├── NodeMap.cs              # Fetches XML, builds node tree, read/write by name
-    └── NodeTypes.cs            # INode, IntegerNode, FloatNode, StringNode,
-                                #   BooleanNode, EnumerationNode, CommandNode
+    └── NodeTypes.cs            # INode + concrete types: IntegerNode, FloatNode,
+                                #   StringNode, BooleanNode, EnumerationNode,
+                                #   CommandNode, ConverterNode, IntConverterNode,
+                                #   MaskedIntRegNode, IntSwissKnifeNode, SwissKnifeNode
 ```
 
 ## Key Design Decisions
