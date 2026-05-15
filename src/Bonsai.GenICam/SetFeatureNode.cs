@@ -7,22 +7,30 @@ using Bonsai.GenICam.GenTL;
 
 namespace Bonsai.GenICam
 {
+    /// <summary>
+    /// Writes a value to a named GenICam feature node each time an element arrives, then passes the element through.
+    /// </summary>
     [Description("Writes a value to a named GenICam feature node each time an element arrives, then passes the element through.")]
     public class SetFeatureNode : Combinator
     {
+        /// <summary>Gets or sets the path to a specific GenTL producer (.cti file). Leave empty to use the system search path.</summary>
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
         public string? ProducerPath { get; set; }
 
+        /// <summary>Gets or sets the zero-based index of the camera in the enumerated device list.</summary>
         [Description("Zero-based index of the camera in the enumerated device list.")]
         public int DeviceIndex { get; set; }
 
+        /// <summary>Gets or sets the name of the GenICam feature node to write (e.g. <c>ExposureTime</c>, <c>Gain</c>).</summary>
         [Description("Name of the GenICam feature node to write (e.g. ExposureTime, Gain).")]
         public string? FeatureName { get; set; }
 
+        /// <summary>Gets or sets the value to write. Strings are accepted for all node types and coerced at runtime.</summary>
         [Description("Value to write. Strings are accepted for all node types and coerced at runtime.")]
         public string? Value { get; set; }
 
+        /// <summary>Writes <see cref="Value"/> to the named feature on each element and passes each element through unchanged.</summary>
         public override IObservable<TSource> Process<TSource>(IObservable<TSource> source)
         {
             return Observable.Using(

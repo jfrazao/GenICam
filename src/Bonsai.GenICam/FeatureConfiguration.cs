@@ -23,23 +23,32 @@ namespace Bonsai.GenICam
         NodeMap? LiveNodeMap { get; }
     }
 
-    // Serialized to .bonsai — one entry per startup feature override.
+    /// <summary>
+    /// Stores a single named feature override that is applied to the camera at workflow startup.
+    /// </summary>
     public class FeatureOverride
     {
+        /// <summary>Gets or sets the GenICam feature name.</summary>
         [XmlAttribute("name")]
         public string Name { get; set; } = string.Empty;
 
+        /// <summary>Gets or sets the value to write, expressed as a string and coerced to the node type at runtime.</summary>
         [XmlAttribute("value")]
         public string Value { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// Holds the list of feature overrides applied to a camera before acquisition starts.
+    /// </summary>
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class FeatureConfiguration
     {
+        /// <summary>Gets the collection of feature overrides serialized into the workflow file.</summary>
         [Browsable(false)]
         [XmlElement("Feature")]
         public List<FeatureOverride> Overrides { get; } = new List<FeatureOverride>();
 
+        /// <summary>Returns a summary string showing the number of startup overrides.</summary>
         public override string ToString() =>
             Overrides.Count == 0 ? "No startup overrides" : $"{Overrides.Count} startup override(s)";
 

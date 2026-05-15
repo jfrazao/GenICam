@@ -12,6 +12,7 @@ namespace Bonsai.GenICam
     /// </summary>
     public static class GenICamXmlExtractor
     {
+        /// <summary>Connects to the camera at <paramref name="deviceIndex"/> and returns its raw GenICam XML string.</summary>
         public static string ExtractXml(string? producerPath, int deviceIndex)
         {
             var (api, localIndex) = GenTLLoader.ResolveAndLoad(

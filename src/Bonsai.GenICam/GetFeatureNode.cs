@@ -7,22 +7,30 @@ using Bonsai.GenICam.GenTL;
 
 namespace Bonsai.GenICam
 {
+    /// <summary>
+    /// Reads a named GenICam feature node from a camera at a specified interval.
+    /// </summary>
     [Description("Reads a named GenICam feature node from a camera at a specified interval.")]
     public class GetFeatureNode : Source<FeatureValue>
     {
+        /// <summary>Gets or sets the path to a specific GenTL producer (.cti file). Leave empty to use the system search path.</summary>
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
         public string? ProducerPath { get; set; }
 
+        /// <summary>Gets or sets the zero-based index of the camera in the enumerated device list.</summary>
         [Description("Zero-based index of the camera in the enumerated device list.")]
         public int DeviceIndex { get; set; }
 
+        /// <summary>Gets or sets the name of the GenICam feature node to read (e.g. <c>ExposureTime</c>, <c>Gain</c>).</summary>
         [Description("Name of the GenICam feature node to read (e.g. ExposureTime, Gain).")]
         public string? FeatureName { get; set; }
 
+        /// <summary>Gets or sets the interval between reads in milliseconds. Use 0 to emit a single value and complete.</summary>
         [Description("Interval between reads in milliseconds. Use 0 to emit a single value and complete.")]
         public double PeriodMs { get; set; } = 1000;
 
+        /// <summary>Returns an observable sequence that reads <see cref="FeatureName"/> once (when <see cref="PeriodMs"/> is zero) or repeatedly at the specified interval.</summary>
         public override IObservable<FeatureValue> Generate()
         {
             return Observable.Using(

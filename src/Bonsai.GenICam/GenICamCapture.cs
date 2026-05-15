@@ -15,6 +15,9 @@ using OpenCV.Net;
 
 namespace Bonsai.GenICam
 {
+    /// <summary>
+    /// Acquires a sequence of images from a GenICam GenTL camera.
+    /// </summary>
     [Description("Acquires a sequence of images from a GenICam GenTL camera.")]
     [Editor("Bonsai.GenICam.GenICamCaptureEditor, Bonsai.GenICam", typeof(ComponentEditor))]
     public class GenICamCapture : Source<IplImage>, IGenICamSource, INotifyPropertyChanged
@@ -27,8 +30,10 @@ namespace Bonsai.GenICam
 
         NodeMap? IGenICamSource.LiveNodeMap => _liveNodeMap;
 
+        /// <summary>Raised when a property that affects camera selection changes.</summary>
         public event PropertyChangedEventHandler? PropertyChanged;
 
+        /// <summary>Gets or sets the path to a specific GenTL producer (.cti file). Leave empty to use the system search path.</summary>
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
         public string? ProducerPath
@@ -37,6 +42,7 @@ namespace Bonsai.GenICam
             set { if (_producerPath == value) return; _producerPath = value; NotifyIdentityChanged(); }
         }
 
+        /// <summary>Gets or sets the zero-based index of the camera in the enumerated device list, or within the matching model group when <see cref="CameraModel"/> is set.</summary>
         [Description("Zero-based index of the camera in the enumerated device list, or within the matching model group when CameraModel is set.")]
         public int DeviceIndex
         {
@@ -52,6 +58,7 @@ namespace Bonsai.GenICam
             }
         }
 
+        /// <summary>Gets or sets the vendor+model string used to filter camera selection (e.g. <c>Basler Blackfly S BFS-U3-16S2M</c>). Leave empty to select by <see cref="DeviceIndex"/> only.</summary>
         [Description("Optional: select camera by vendor+model string (e.g. 'Basler Blackfly S BFS-U3-16S2M'). Leave empty to select by DeviceIndex only.")]
         [Editor(typeof(CameraModelEditor), typeof(UITypeEditor))]
         public string? CameraModel
@@ -67,6 +74,7 @@ namespace Bonsai.GenICam
             }
         }
 
+        /// <summary>Gets or sets the serial number used to identify the camera. When set, overrides <see cref="CameraModel"/> and <see cref="DeviceIndex"/>; a mismatch at startup causes an error.</summary>
         [Description("Optional: select camera by serial number. When set, overrides CameraModel and DeviceIndex for device lookup; a mismatch causes an error at startup.")]
         [Editor(typeof(SerialNumberEditor), typeof(UITypeEditor))]
         public string? SerialNumber
@@ -83,12 +91,15 @@ namespace Bonsai.GenICam
             }
         }
 
+        /// <summary>Gets or sets the number of acquisition buffers to allocate.</summary>
         [Description("Number of acquisition buffers to allocate.")]
         public int NumBuffers { get; set; } = 4;
 
+        /// <summary>Gets or sets the timeout in milliseconds to wait for each frame.</summary>
         [Description("Timeout in milliseconds to wait for each frame.")]
         public uint FrameTimeoutMs { get; set; } = 5000;
 
+        /// <summary>Gets or sets the camera feature values to apply before acquisition starts.</summary>
         [Description("Camera feature values to apply before acquisition starts.")]
         [TypeConverter(typeof(ExpandableObjectConverter))]
         [Editor(typeof(FeatureConfigurationEditor), typeof(UITypeEditor))]
@@ -99,6 +110,7 @@ namespace Bonsai.GenICam
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Features)));
         }
 
+        /// <summary>Returns an observable sequence of <see cref="IplImage"/> frames captured from the configured camera.</summary>
         public override IObservable<IplImage> Generate()
         {
             return Observable.Create<IplImage>(observer =>
