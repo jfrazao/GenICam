@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
+using Bonsai.GenICam;
 using Bonsai.GenICam.GenApi;
 using Bonsai.GenICam.GenTL;
 
-namespace Bonsai.GenICam
+namespace Bonsai.GenICam.TestApp
 {
-    public class FeatureRoundTripResult
+    class FeatureRoundTripResult
     {
         public string Name { get; set; } = string.Empty;
         public string? Kind { get; set; }
@@ -20,7 +21,7 @@ namespace Bonsai.GenICam
         public string? Error { get; set; }
     }
 
-    public static class FeatureRoundTripTester
+    static class FeatureRoundTripTester
     {
         public static List<FeatureRoundTripResult> Run(string? producerPath, int deviceIndex, string[] featureNames)
         {
@@ -57,14 +58,13 @@ namespace Bonsai.GenICam
                             var before = map.Read(name);
                             result.ValueBefore = before.Value?.ToString();
 
-                            string testVal = kind == FeatureKind.Integer ? "20000" : "20000";
+                            string testVal = "20000";
                             result.ValueWritten = testVal;
                             map.Write(name, testVal);
 
                             var after = map.Read(name);
                             result.ValueReadBack = after.Value?.ToString();
 
-                            // Restore
                             if (result.ValueBefore != null)
                                 map.Write(name, result.ValueBefore);
                         }
