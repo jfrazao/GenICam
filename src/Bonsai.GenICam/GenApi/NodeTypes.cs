@@ -15,6 +15,8 @@ namespace Bonsai.GenICam.GenApi
         public string? Description { get; set; }
         public string? ToolTip { get; set; }
         public NodeVisibility Visibility { get; set; } = NodeVisibility.Beginner;
+        public string? PIsImplemented { get; set; }
+        public string? PIsAvailable { get; set; }
     }
 
     // Direct register nodes (hold the actual address + length)

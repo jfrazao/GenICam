@@ -53,10 +53,12 @@ namespace Bonsai.GenICam.GenApi
                 NodeBase? node = ParseElement(el, ns, name);
                 if (node != null)
                 {
-                    node.Description = ((string)el.Element(ns + "Description"))?.Trim();
-                    node.ToolTip     = ((string)el.Element(ns + "ToolTip"))?.Trim();
+                    node.Description    = ((string)el.Element(ns + "Description"))?.Trim();
+                    node.ToolTip        = ((string)el.Element(ns + "ToolTip"))?.Trim();
                     if (node.Description == null) node.Description = node.ToolTip;
-                    node.Visibility  = ParseVisibility((string)el.Element(ns + "Visibility"));
+                    node.Visibility     = ParseVisibility((string)el.Element(ns + "Visibility"));
+                    node.PIsImplemented = ((string)el.Element(ns + "pIsImplemented"))?.Trim();
+                    node.PIsAvailable   = ((string)el.Element(ns + "pIsAvailable"))?.Trim();
                     _nodes[name] = node;
                 }
             }
@@ -315,7 +317,24 @@ namespace Bonsai.GenICam.GenApi
         internal bool CanWrite(string name)
         {
             if (!_nodes.TryGetValue(name, out var node)) return false;
+            if (!IsNodeAvailable(node)) return false;
             return EffectiveWritable(node);
+        }
+
+        // Returns false when the hardware reports a feature as unavailable via
+        // pIsImplemented/pIsAvailable guards (e.g. IDS cameras block ExposureAuto,
+        // GainAuto, and BalanceWhiteAuto at the GCWritePort level when the
+        // AutofeatureAvailableReg bitmask is 0). Features remain visible in the editor
+        // as read-only rather than disappearing.
+        private bool IsNodeAvailable(NodeBase node)
+        {
+            if (node.PIsImplemented != null)
+                try { if (Convert.ToInt64(ReadNode(Resolve(node.PIsImplemented))) == 0) return false; }
+                catch { return false; }
+            if (node.PIsAvailable != null)
+                try { if (Convert.ToInt64(ReadNode(Resolve(node.PIsAvailable))) == 0) return false; }
+                catch { return false; }
+            return true;
         }
 
         // Traverses the pValue chain to the terminal register node so that a logical
