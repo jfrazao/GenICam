@@ -119,7 +119,7 @@ namespace Bonsai.GenICam
             }
 
             int offset = (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) ? 3 : 0;
-            return Encoding.UTF8.GetString(bytes, offset, bytes.Length - offset);
+            return Encoding.UTF8.GetString(bytes, offset, bytes.Length - offset).TrimEnd('\0');
         }
     }
 }
