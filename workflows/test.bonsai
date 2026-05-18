@@ -64,7 +64,7 @@
       <Expression xsi:type="Combinator">
         <Combinator xsi:type="p1:GenICamCapture">
           <p1:ProducerPath />
-          <p1:DeviceIndex>0</p1:DeviceIndex>
+          <p1:DeviceIndex>3</p1:DeviceIndex>
           <p1:NumBuffers>4</p1:NumBuffers>
           <p1:FrameTimeoutMs>5000</p1:FrameTimeoutMs>
           <p1:Features />
