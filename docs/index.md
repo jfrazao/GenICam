@@ -1,1 +1,1 @@
-[!INCLUDE [](../README.md)]
+[!INCLUDE [](README.md)]
