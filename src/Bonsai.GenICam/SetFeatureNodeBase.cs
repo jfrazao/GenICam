@@ -14,7 +14,7 @@ namespace Bonsai.GenICam
     /// <see cref="Format"/> method that converts a typed upstream value to the
     /// string accepted by <see cref="NodeMap.Write"/>.
     /// </summary>
-    public abstract class SetFeatureNodeBase<T> : Combinator<T, T>, IGenICamFeatureNode
+    public abstract class SetFeatureNodeBase<T> : Combinator<T, T>, IGenICamSource
     {
         NodeMap? IGenICamSource.LiveNodeMap => null;
 
@@ -39,12 +39,10 @@ namespace Bonsai.GenICam
 
         /// <summary>Gets or sets the GenICam category used to filter the <see cref="FeatureName"/> dropdown. Leave empty to browse all features.</summary>
         [Description("Optional: filter the feature list by category. Leave empty to browse all features.")]
-        [Editor(typeof(FeatureCategoryEditor), typeof(UITypeEditor))]
         public string? FeatureCategory { get; set; }
 
         /// <summary>Gets or sets the name of the GenICam feature node to write (e.g. <c>ExposureTime</c>, <c>Gain</c>).</summary>
         [Description("Name of the GenICam feature node to write (e.g. ExposureTime, Gain).")]
-        [Editor(typeof(FeatureNameEditor), typeof(UITypeEditor))]
         public string? FeatureName { get; set; }
 
         /// <summary>Formats the typed upstream value as the string accepted by <see cref="NodeMap.Write"/>.</summary>
@@ -53,15 +51,6 @@ namespace Bonsai.GenICam
         /// <inheritdoc/>
         public override IObservable<T> Process(IObservable<T> source)
         {
-            var path   = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
-            var serial = string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber;
-            var model  = string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel;
-            var key    = NodeMapRegistry.MakeKey(serial, model, DeviceIndex, path);
-
-            var shared = NodeMapRegistry.TryLookup(key);
-            if (shared != null)
-                return source.Do(v => shared.Write(FeatureName!, Format(v)));
-
             return Observable.Using(
                 () => OpenDevice(),
                 ctx =>

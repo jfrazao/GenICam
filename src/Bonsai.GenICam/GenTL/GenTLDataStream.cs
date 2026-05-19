@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Bonsai.GenICam;
 using OpenCV.Net;
 
 namespace Bonsai.GenICam.GenTL
@@ -81,7 +82,7 @@ namespace Bonsai.GenICam.GenTL
         }
 
         // Blocks until a buffer arrives (or timeout ms elapses). Returns null on timeout or abort.
-        internal IplImage? WaitForFrame(uint timeoutMs)
+        internal GenICamFrame? WaitForFrame(uint timeoutMs)
         {
             // S_EVENT_NEW_BUFFER = { BUFFER_HANDLE BufferHandle; void* pUserPointer; }
             var eventData = new byte[2 * IntPtr.Size];
@@ -98,7 +99,7 @@ namespace Bonsai.GenICam.GenTL
 
             try
             {
-                return ExtractImage(hBuffer);
+                return ExtractFrame(hBuffer);
             }
             finally
             {
@@ -106,13 +107,18 @@ namespace Bonsai.GenICam.GenTL
             }
         }
 
-        private IplImage ExtractImage(IntPtr hBuffer)
+        private GenICamFrame ExtractFrame(IntPtr hBuffer)
         {
             int width  = (int)TryGetBufferInfo(hBuffer, BufferInfoCmd.Width,  (ulong)_fallbackWidth);
             int height = (int)TryGetBufferInfo(hBuffer, BufferInfoCmd.Height, (ulong)_fallbackHeight);
             ulong pixelFormat = TryGetBufferInfo(hBuffer, BufferInfoCmd.PixelFormat, _fallbackPixelFmt);
             IntPtr basePtr = GetBufferInfoPtr(hBuffer, BufferInfoCmd.Base);
             ulong sizeFilled = TryGetBufferInfo(hBuffer, BufferInfoCmd.SizeFilled, ulong.MaxValue);
+
+            ulong timestamp   = TryGetBufferInfo(hBuffer, BufferInfoCmd.Timestamp,   0);
+            ulong timestampNs = TryGetBufferInfo(hBuffer, BufferInfoCmd.TimestampNS, 0);
+            ulong frameId     = TryGetBufferInfo(hBuffer, BufferInfoCmd.FrameID,     0);
+            bool isIncomplete = TryGetBufferInfoBool(hBuffer, BufferInfoCmd.IsIncomplete, false);
 
             if (width <= 0 || height <= 0)
                 throw new InvalidOperationException(
@@ -135,12 +141,18 @@ namespace Bonsai.GenICam.GenTL
                     expectedBytes,
                     expectedBytes);
             }
-            return image;
+            return new GenICamFrame(image, timestamp, timestampNs, frameId, isIncomplete);
         }
 
         private ulong TryGetBufferInfo(IntPtr hBuffer, BufferInfoCmd cmd, ulong fallback)
         {
             try { return GetBufferInfoUInt64(hBuffer, cmd); }
+            catch { return fallback; }
+        }
+
+        private bool TryGetBufferInfoBool(IntPtr hBuffer, BufferInfoCmd cmd, bool fallback)
+        {
+            try { return GetBufferInfoBool(hBuffer, cmd); }
             catch { return fallback; }
         }
 
@@ -234,6 +246,14 @@ namespace Bonsai.GenICam.GenTL
             var size = new UIntPtr(8);
             GenTLException.Check(_api.DSGetBufferInfo(_handle, hBuffer, (uint)cmd, out _, buf, ref size));
             return BitConverter.ToUInt64(buf, 0);
+        }
+
+        private bool GetBufferInfoBool(IntPtr hBuffer, BufferInfoCmd cmd)
+        {
+            var buf = new byte[1];
+            var size = new UIntPtr(1);
+            GenTLException.Check(_api.DSGetBufferInfo(_handle, hBuffer, (uint)cmd, out _, buf, ref size));
+            return buf[0] != 0;
         }
 
         private IntPtr GetBufferInfoPtr(IntPtr hBuffer, BufferInfoCmd cmd)

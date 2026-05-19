@@ -11,7 +11,6 @@ using System.Windows.Forms.Design;
 using Bonsai;
 using Bonsai.GenICam.GenApi;
 using Bonsai.GenICam.GenTL;
-using OpenCV.Net;
 
 namespace Bonsai.GenICam
 {
@@ -20,7 +19,7 @@ namespace Bonsai.GenICam
     /// </summary>
     [Description("Acquires a sequence of images from a GenICam GenTL camera.")]
     [Editor("Bonsai.GenICam.GenICamCaptureEditor, Bonsai.GenICam", typeof(ComponentEditor))]
-    public class GenICamCapture : Source<IplImage>, IGenICamSource, INotifyPropertyChanged
+    public class GenICamCapture : Source<GenICamFrame>, IGenICamSource, INotifyPropertyChanged
     {
         private string? _producerPath;
         private int _deviceIndex;
@@ -110,18 +109,22 @@ namespace Bonsai.GenICam
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Features)));
         }
 
-        /// <summary>Returns an observable sequence of <see cref="IplImage"/> frames captured from the configured camera.</summary>
-        public override IObservable<IplImage> Generate()
+        /// <summary>Returns an observable sequence of <see cref="GenICamFrame"/> instances captured from the configured camera.</summary>
+        public override IObservable<GenICamFrame> Generate()
         {
-            return Observable.Create<IplImage>(observer =>
+            return Observable.Create<GenICamFrame>(observer =>
             {
+                var path   = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
+                var serial = string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber;
+                var model  = string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel;
+
                 var state = new CaptureState
                 {
                     Observer = observer,
-                    ProducerPath = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath,
+                    ProducerPath = path,
                     DeviceIndex = DeviceIndex,
-                    CameraModel = string.IsNullOrWhiteSpace(CameraModel) ? null : CameraModel,
-                    SerialNumber = string.IsNullOrWhiteSpace(SerialNumber) ? null : SerialNumber,
+                    CameraModel = model,
+                    SerialNumber = serial,
                     NumBuffers = NumBuffers,
                     FrameTimeoutMs = FrameTimeoutMs,
                     Features = Features,
@@ -271,7 +274,7 @@ namespace Bonsai.GenICam
 
         private sealed class CaptureState
         {
-            public IObserver<IplImage> Observer = null!;
+            public IObserver<GenICamFrame> Observer = null!;
             public string? ProducerPath;
             public int DeviceIndex;
             public string? CameraModel;

@@ -13,7 +13,7 @@ namespace Bonsai.GenICam
     /// <see cref="Convert"/> method that casts the raw <see cref="FeatureValue"/>
     /// to a concrete .NET type.
     /// </summary>
-    public abstract class GetFeatureNodeBase<T> : Source<T>, IGenICamFeatureNode
+    public abstract class GetFeatureNodeBase<T> : Source<T>, IGenICamSource
     {
         NodeMap? IGenICamSource.LiveNodeMap => null;
 
@@ -38,12 +38,10 @@ namespace Bonsai.GenICam
 
         /// <summary>Gets or sets the GenICam category used to filter the <see cref="FeatureName"/> dropdown. Leave empty to browse all features.</summary>
         [Description("Optional: filter the feature list by category. Leave empty to browse all features.")]
-        [Editor(typeof(FeatureCategoryEditor), typeof(UITypeEditor))]
         public string? FeatureCategory { get; set; }
 
         /// <summary>Gets or sets the name of the GenICam feature node to read (e.g. <c>ExposureTime</c>, <c>Gain</c>).</summary>
         [Description("Name of the GenICam feature node to read (e.g. ExposureTime, Gain).")]
-        [Editor(typeof(FeatureNameEditor), typeof(UITypeEditor))]
         public string? FeatureName { get; set; }
 
         /// <summary>Gets or sets the interval between reads in milliseconds. Use 0 to emit a single value and complete.</summary>
@@ -56,15 +54,6 @@ namespace Bonsai.GenICam
         /// <inheritdoc/>
         public override IObservable<T> Generate()
         {
-            var path   = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
-            var serial = string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber;
-            var model  = string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel;
-            var key    = NodeMapRegistry.MakeKey(serial, model, DeviceIndex, path);
-
-            var shared = NodeMapRegistry.TryLookup(key);
-            if (shared != null)
-                return BuildReadObservable(shared);
-
             return Observable.Using(() => OpenDevice(), ctx => BuildReadObservable(new NodeMap(ctx.Api, ctx.Port)));
         }
 
@@ -91,6 +80,32 @@ namespace Bonsai.GenICam
             var sys = new GenTLSystem(a);
             var (_, _, ifc, dev) = sys.FindAndOpenDevice(localIndex, DeviceAccessFlags.ReadOnly);
             return new GenICamDeviceContext(a, sys, ifc, dev);
+        }
+    }
+
+    internal sealed class GenICamDeviceContext : IDisposable
+    {
+        internal readonly GenTLApi Api;
+        internal readonly IntPtr Port;
+        private readonly GenTLSystem _system;
+        private readonly GenTLInterface _iface;
+        private readonly GenTLDevice _device;
+
+        internal GenICamDeviceContext(GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device)
+        {
+            Api = api;
+            _system = system;
+            _iface = iface;
+            _device = device;
+            Port = device.GetPort();
+        }
+
+        public void Dispose()
+        {
+            _device.Dispose();
+            _iface.Dispose();
+            _system.Dispose();
+            Api.Dispose();
         }
     }
 
