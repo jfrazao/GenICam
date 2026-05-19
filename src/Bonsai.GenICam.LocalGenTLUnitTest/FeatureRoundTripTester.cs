@@ -58,7 +58,20 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                             var before = map.Read(name);
                             result.ValueBefore = before.Value?.ToString();
 
-                            string testVal = "20000";
+                            // Pick a value within the feature's own limits.
+                            // Fall back to "20000" only when limits are unknown.
+                            string testVal;
+                            if (limits.max.HasValue)
+                            {
+                                double lo  = limits.min ?? 0.0;
+                                double hi  = limits.max.Value;
+                                double mid = (lo + hi) / 2.0;
+                                testVal = kind == FeatureKind.Integer
+                                    ? ((long)mid).ToString()
+                                    : mid.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            }
+                            else
+                                testVal = "20000";
                             result.ValueWritten = testVal;
                             map.Write(name, testVal);
 

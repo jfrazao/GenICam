@@ -132,9 +132,7 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                         done.Set();
                     }))
             {
-                bool completed = done.Wait(TimeSpan.FromSeconds(35));
-                if (!completed)
-                    Console.WriteLine("  Timed out — no frames or error in 35s (WaitForFrame kept returning null; AcquisitionStart likely failed).");
+                done.Wait();
             }
 
             Console.WriteLine();
