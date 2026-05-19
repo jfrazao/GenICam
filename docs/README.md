@@ -21,8 +21,16 @@ A [Bonsai](https://bonsai-rx.org) package for acquiring images and reading/writi
 |---|---|---|
 | `GenICamCapture` | `Source<IplImage>` | Streams frames from a camera |
 | `EnumerateDevices` | `Source<DeviceInfo[]>` | Lists all detected GenICam cameras |
-| `GetFeatureNode` | `Source<FeatureValue>` | Reads a named feature (e.g. `ExposureTime`) |
-| `SetFeatureNode` | `Combinator` | Writes a named feature on each upstream element |
+| `GetFeatureNode` | `Source<FeatureValue>` | Reads a named feature; value is `object` at runtime |
+| `GetIntFeature` | `Source<long>` | Reads a GenICam Integer feature as `long` |
+| `GetFloatFeature` | `Source<double>` | Reads a GenICam Float feature as `double` |
+| `GetBoolFeature` | `Source<bool>` | Reads a GenICam Boolean feature as `bool` |
+| `GetStringFeature` | `Source<string>` | Reads a GenICam String or Enumeration feature as `string` |
+| `SetFeatureNode` | `Combinator` | Writes a named feature from a string `Value` property on each upstream element |
+| `SetIntFeature` | `Combinator<long, long>` | Writes a GenICam Integer feature from an upstream `long` |
+| `SetFloatFeature` | `Combinator<double, double>` | Writes a GenICam Float feature from an upstream `double` |
+| `SetBoolFeature` | `Combinator<bool, bool>` | Writes a GenICam Boolean feature from an upstream `bool` |
+| `SetStringFeature` | `Combinator<string, string>` | Writes a GenICam String or Enumeration feature from an upstream `string` |
 | `ListFeatureValues` | `Source<FeatureValue[]>` | Reads all readable features from a device |
 
 ### GenICamCapture
@@ -77,9 +85,48 @@ Persisted by Bonsai's normal **Save workflow** (Ctrl+S).
 1. The device is opened (using `SerialNumber`, `CameraModel`, or `DeviceIndex` — see priority above). If the device cannot be found, an error is thrown and no overrides are applied.
 2. Each override is written to the camera in list order. Individual write failures are silently skipped (best-effort); the workflow starts regardless.
 
-### GetFeatureNode / SetFeatureNode
-- `FeatureName` — GenICam XML feature name, e.g. `ExposureTime`, `Gain`, `AcquisitionFrameRate`
+### GetFeatureNode / SetFeatureNode / ListFeatureValues
+
+All three operators share the same camera-selection properties as `GenICamCapture`:
+
+- `ProducerPath` — optional path to a specific `.cti` file
+- `DeviceIndex` — zero-based index; when `CameraModel` is set, counts only within the matching model group
+- `CameraModel` — optional vendor+model filter; click the dropdown to pick from detected cameras
+- `SerialNumber` — optional serial number; overrides `CameraModel` and `DeviceIndex` when set
+
+Camera selection follows the same priority as `GenICamCapture` (SerialNumber → CameraModel → DeviceIndex).
+
+`GetFeatureNode` and `SetFeatureNode` also have:
+
+- `FeatureCategory` — optional category filter; click the dropdown to pick a GenICam category (e.g. `AcquisitionControl`, `ImageFormatControl`). Filters the `FeatureName` dropdown — leave blank to browse all features.
+- `FeatureName` — GenICam XML feature name; click the dropdown to pick from the features in the selected category (or all features if no category is set). Populated by connecting to the camera on demand.
 - `Value` *(SetFeatureNode only)* — value as a string, parsed to the node's type at runtime
+- `PeriodMs` *(GetFeatureNode only)* — interval between reads in ms; `0` emits a single value and completes (default `1000`)
+
+#### Shared device connection
+
+When any feature operator targets the same camera as a running `GenICamCapture` (matched by serial, model+index, or producer+index), it reuses `GenICamCapture`'s open `NodeMap` instead of opening a competing GenTL connection. This avoids the `TLOpen` contention that causes some producers to report zero devices when two operators try to connect simultaneously.
+
+### Typed feature operators
+
+`GetIntFeature`, `GetFloatFeature`, `GetBoolFeature`, and `GetStringFeature` are typed variants of `GetFeatureNode` that emit native .NET types directly. `SetIntFeature`, `SetFloatFeature`, `SetBoolFeature`, and `SetStringFeature` are typed variants of `SetFeatureNode` that accept typed upstream observables instead of a string `Value` property.
+
+| Node kind | Get operator | Set operator |
+|---|---|---|
+| Integer | `GetIntFeature` → `long` | `SetIntFeature` ← `long` |
+| Float | `GetFloatFeature` → `double` | `SetFloatFeature` ← `double` |
+| Boolean | `GetBoolFeature` → `bool` | `SetBoolFeature` ← `bool` |
+| String / Enumeration | `GetStringFeature` → `string` | `SetStringFeature` ← `string` |
+
+Use the typed variants when you want to wire feature values directly into arithmetic, logic, or other typed operators without an intermediate cast step:
+
+```
+GetFloatFeature(FeatureName="ExposureTime") → Multiply(2.0) → SetFloatFeature(FeatureName="ExposureTime")
+```
+
+Use `GetFeatureNode` / `SetFeatureNode` when the feature type is unknown at design time, or for introspection workflows that handle multiple features of different types.
+
+All typed operators share the same camera-selection properties and `FeatureCategory`/`FeatureName` dropdowns as `GetFeatureNode` / `SetFeatureNode`, and reuse `GenICamCapture`'s open `NodeMap` via `NodeMapRegistry` when targeting the same camera. `FeatureName` is read on every sample — changing it in the property grid while the workflow is running takes effect immediately on the next sample.
 
 ## License
 

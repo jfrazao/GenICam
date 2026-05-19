@@ -24,12 +24,19 @@ src/Bonsai.GenICam/
 │
 ├── GenICamCapture.cs           # Source<IplImage> — streams frames
 ├── EnumerateDevices.cs         # Source<DeviceInfo[]> — lists cameras
-├── GetFeatureNode.cs           # Source<FeatureValue> — reads a named feature
-├── SetFeatureNode.cs           # Combinator — writes a named feature + passthrough
+├── GetFeatureNode.cs           # Source<FeatureValue> — reads a named feature (object value)
+├── GetFeatureNodeBase.cs       # Abstract Source<T> base + GetIntFeature, GetFloatFeature,
+│                               #   GetBoolFeature, GetStringFeature (typed variants)
+├── SetFeatureNode.cs           # Combinator — writes a named feature (string Value) + passthrough
+├── SetFeatureNodeBase.cs       # Abstract Combinator<T,T> base + SetIntFeature, SetFloatFeature,
+│                               #   SetBoolFeature, SetStringFeature (typed variants)
 ├── ListFeatureValues.cs        # Source<FeatureValue[]> — reads all readable features
-├── FeatureConfiguration.cs     # FeatureOverride list, editor form, UITypeEditors
+├── FeatureConfiguration.cs     # FeatureOverride list, editor form, UITypeEditors,
+│                               #   FeatureCategoryEditor, FeatureNameEditor
 ├── FeatureRoundTripTester.cs   # Diagnostic: write/readback test for named features
 ├── GenICamXmlExtractor.cs      # Static helper — fetches raw GenICam XML from a device
+├── GenICamDeviceContext.cs     # Shared IDisposable wrapping api+system+iface+device+port
+├── NodeMapRegistry.cs          # Process-wide map of open NodeMaps keyed by camera identity
 │
 ├── DeviceInfo.cs               # Struct: index, vendor, model, serial, TL type
 ├── FeatureValue.cs             # Discriminated union: int/double/string/bool/enum
@@ -88,6 +95,18 @@ Buffer metadata (width, height, pixel format) from `DSGetBufferInfo`. Pixel form
 4. Node `pAddress` + `Length` + `AccessMode` from XML drives `GCReadPort`/`GCWritePort`
 5. `GetFeatureNode` / `SetFeatureNode` call `NodeMap.GetNode(name)` then cast to the appropriate node type
 
+### NodeMapRegistry — shared device connection
+
+Many GenTL producers (including Vimba and its simulator) do not permit two concurrent `TLOpen` sessions from the same process on the same CTI file. If `GenICamCapture` and `GetFeatureNode` both start simultaneously and target the same camera, the second `TLOpen` returns zero devices, producing a *no GenTL device found* error.
+
+`NodeMapRegistry` is a process-wide `Dictionary<string, NodeMap>` that breaks this cycle:
+
+1. `GenICamCapture` **registers** its open `NodeMap` immediately after building it (before starting the acquisition loop), keyed by a camera identity string derived from `SerialNumber`, `CameraModel+DeviceIndex`, or `ProducerPath+DeviceIndex` (whichever is most specific).
+2. `GenICamCapture` **unregisters** the map in the finally block when the workflow stops.
+3. All feature operators (`GetFeatureNode`, `SetFeatureNode`, and all typed variants) **check the registry first**. If a matching entry exists they read/write through it without opening any GenTL connection of their own.
+
+This makes co-located `GenICamCapture` + feature operator workflows work regardless of operator start order — the feature operators fall back to opening their own connection only when no registry entry is found (e.g. when used standalone, or when targeting a different camera than any running capture).
+
 #### pIsImplemented / pIsAvailable guards
 
 Some features declare a `<pIsImplemented>` or `<pIsAvailable>` element pointing to another node (typically a `MaskedIntReg`) that evaluates to 0 when the hardware does not support that feature on a given device variant. The GenTL producer enforces this at the `GCWritePort` level — write attempts return `GC_ERR_NOT_IMPLEMENTED` regardless of the node's declared `AccessMode`.
@@ -117,27 +136,69 @@ public class EnumerateDevices : Source<DeviceInfo[]>
     public string ProducerPath { get; set; }
 }
 
-// Reads a single named feature on subscribe
+// Reads a named feature repeatedly at PeriodMs interval (0 = once and complete)
 public class GetFeatureNode : Source<FeatureValue>
 {
-    public string ProducerPath { get; set; }
-    public int DeviceIndex { get; set; }
-    public string FeatureName { get; set; }
+    public string?  ProducerPath    { get; set; }   // optional .cti override
+    public int      DeviceIndex     { get; set; }   // global index, or within model group
+    public string?  CameraModel     { get; set; }   // same semantics as GenICamCapture
+    public string?  SerialNumber    { get; set; }   // same semantics as GenICamCapture
+    public string?  FeatureCategory { get; set; }   // filters FeatureName dropdown
+    public string?  FeatureName     { get; set; }   // GenICam XML node name
+    public double   PeriodMs        { get; set; } = 1000;
 }
 
 // Writes a named feature on each upstream element, passes element through unchanged
 public class SetFeatureNode : Combinator
 {
-    public string ProducerPath { get; set; }
-    public int DeviceIndex { get; set; }
-    public string FeatureName { get; set; }
-    public string Value { get; set; }   // parsed to node type at runtime
+    public string?  ProducerPath    { get; set; }
+    public int      DeviceIndex     { get; set; }
+    public string?  CameraModel     { get; set; }
+    public string?  SerialNumber    { get; set; }
+    public string?  FeatureCategory { get; set; }   // filters FeatureName dropdown
+    public string?  FeatureName     { get; set; }
+    public string?  Value           { get; set; }   // parsed to node type at runtime
 }
 
 // Reads all readable features as a single snapshot
 public class ListFeatureValues : Source<FeatureValue[]>
 {
-    public string ProducerPath { get; set; }
-    public int DeviceIndex { get; set; }
+    public string?  ProducerPath  { get; set; }
+    public int      DeviceIndex   { get; set; }
+    public string?  CameraModel   { get; set; }
+    public string?  SerialNumber  { get; set; }
 }
+
+// Abstract base for typed reads; FeatureName is read on every sample (runtime-editable)
+public abstract class GetFeatureNodeBase<T> : Source<T>
+{
+    public string?  ProducerPath    { get; set; }
+    public int      DeviceIndex     { get; set; }
+    public string?  CameraModel     { get; set; }
+    public string?  SerialNumber    { get; set; }
+    public string?  FeatureCategory { get; set; }
+    public string?  FeatureName     { get; set; }
+    public double   PeriodMs        { get; set; } = 1000;
+    protected abstract T Convert(FeatureValue value);
+}
+public class GetIntFeature    : GetFeatureNodeBase<long>   { }  // (long)v.Value
+public class GetFloatFeature  : GetFeatureNodeBase<double> { }  // (double)v.Value
+public class GetBoolFeature   : GetFeatureNodeBase<bool>   { }  // (bool)v.Value
+public class GetStringFeature : GetFeatureNodeBase<string> { }  // v.Value?.ToString()
+
+// Abstract base for typed writes; FeatureName is read on every element (runtime-editable)
+public abstract class SetFeatureNodeBase<T> : Combinator<T, T>
+{
+    public string?  ProducerPath    { get; set; }
+    public int      DeviceIndex     { get; set; }
+    public string?  CameraModel     { get; set; }
+    public string?  SerialNumber    { get; set; }
+    public string?  FeatureCategory { get; set; }
+    public string?  FeatureName     { get; set; }
+    protected abstract string Format(T value);
+}
+public class SetIntFeature    : SetFeatureNodeBase<long>   { }  // v.ToString()
+public class SetFloatFeature  : SetFeatureNodeBase<double> { }  // InvariantCulture
+public class SetBoolFeature   : SetFeatureNodeBase<bool>   { }  // "True"/"False"
+public class SetStringFeature : SetFeatureNodeBase<string> { }  // pass-through
 ```
