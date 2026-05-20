@@ -178,7 +178,8 @@ namespace Bonsai.GenICam
                     var nodeMap = new NodeMap(ctx.Api, ctx.Port);
                     s.Features.Apply(nodeMap);
                     if (s.Name != null)
-                        deviceLifetime = GenICamConnectionManager.Publish(s.Name, ctx, nodeMap);
+                        deviceLifetime = new CompositeDisposable(
+                            GenICamConnectionManager.Publish(s.Name, nodeMap), ctx);
                     s.SetLiveNodeMap(nodeMap);
                     step = "open data stream";
                     using (var stream = device.OpenDataStream())

@@ -59,12 +59,8 @@ namespace Bonsai.GenICam
             if (string.IsNullOrWhiteSpace(FeatureName))
                 throw new InvalidOperationException($"{GetType().Name}: FeatureName must be set.");
             if (!string.IsNullOrWhiteSpace(Connection))
-            {
-                return Observable.Using(
-                    () => GenICamConnectionManager.Acquire(Connection!)
-                          ?? throw new InvalidOperationException($"GenICamCapture named '{Connection}' did not publish a connection within the timeout."),
-                    conn => source.Do(v => conn.NodeMap.Write(FeatureName!, Format(v))));
-            }
+                return GenICamConnectionManager.Acquire(Connection!)
+                    .SelectMany(map => source.Do(v => map.Write(FeatureName!, Format(v))));
             return Observable.Using(
                 () => OpenDevice(),
                 ctx =>
