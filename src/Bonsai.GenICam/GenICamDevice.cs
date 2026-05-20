@@ -92,9 +92,9 @@ namespace Bonsai.GenICam
                             msg =>
                             {
                                 try { syncObs.OnNext(Dispatch(msg, map)); }
-                                catch (Exception ex) { syncObs.OnError(ex); cancel.Cancel(); }
+                                catch (Exception ex) { syncObs.OnError(ex); }
                             },
-                            ex => { syncObs.OnError(ex); cancel.Cancel(); },
+                            ex => syncObs.OnError(ex),
                             () => { if (!acquireFrames) syncObs.OnCompleted(); });
 
                     AcqState? acqState = null;
