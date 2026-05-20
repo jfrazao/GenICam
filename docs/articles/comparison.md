@@ -53,13 +53,11 @@ The blocking GenTL event loop is the idiomatic approach for GenTL consumers and 
 
 | Package | Output |
 |---|---|
-| `Bonsai.GenICam` | `IplImage` (OpenCV.Net, directly usable in Bonsai Vision pipelines) |
+| `Bonsai.GenICam` | `GenICamFrame` — carries `IplImage` + `TimestampNs` + `FrameId` + `IsIncomplete`; use `.Image` for Bonsai Vision pipelines |
 | Spinnaker, Pylon, Vimba | Vendor `DataFrames` (raw image + metadata; needs a downstream conversion step) |
 | Ximea, Sapera | Vendor `DataFrames` |
 
-Vendor `DataFrame` outputs carry richer metadata (timestamps, chunk data, frame IDs); converting to `IplImage` for use in Bonsai Vision pipelines requires a downstream adapter operator. `Bonsai.GenICam` emits `IplImage` directly but foregoes that metadata.
-
-**TODO:** consider aligning the output type to a `GenICamDataFrame` wrapper for consistency with the rest of the ecosystem.
+`GenICamFrame` carries richer metadata (timestamp, frame ID, incomplete flag) alongside the `IplImage`. Vendor packages return proprietary `DataFrame` types that need a downstream conversion step for Bonsai Vision.
 
 ## Unique aspects of Bonsai.GenICam
 

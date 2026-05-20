@@ -97,27 +97,13 @@ Buffer metadata (width, height, pixel format) from `DSGetBufferInfo`. Pixel form
 4. Node `pAddress` + `Length` + `AccessMode` from XML drives `GCReadPort`/`GCWritePort`
 5. `GetFeatureNode` / `SetFeatureNode` call `NodeMap.GetNode(name)` then cast to the appropriate node type
 
-### Connection sharing — shipped approach (`GenICamConnectionManager`)
+### Connection sharing — `BehaviorSubject` (`GenICamConnectionManager`)
 
-**Branch:** `fix/sharing-state-connection` (merged to `main`)
+**Branch:** `fix/sharing-state-subject`
 
 Many GenTL producers do not permit two concurrent `TLOpen` sessions from the same process on the same CTI file. If `GenICamCapture` and `GetFeatureNode` both start and target the same camera, the second open returns zero devices.
 
 The solution is a named connection slot: `GenICamCapture` exposes a `Name` property. Feature operators expose a matching `Connection` property. `GenICamConnectionManager` is a static registry keyed by that name:
-
-1. `GenICamCapture` calls `Publish(name, nodeMap)` after the NodeMap is built — stores the entry and signals waiters.
-2. Feature operators call `Acquire(name)` — blocks (via `Monitor.Wait`) up to 10 s until the capture publishes, then returns a ref-counted `SharedNodeMap`.
-3. When all refs are released the device is closed.
-
-**Rationale:** Explicit naming decouples selection (which camera) from sharing (which operators share it). The ref-counting ensures the device stays open as long as any operator needs it and closes cleanly when all are done. The blocking `Acquire` is a pragmatic choice — feature operators cannot proceed before the device is open, so blocking is correct; the 10 s timeout surfaces misconfiguration quickly.
-
-**Trade-off:** `Monitor.Wait` parks a thread in an otherwise fully reactive codebase. Two alternatives are being explored on separate branches (see below).
-
----
-
-### Connection sharing — Alternative A: `BehaviorSubject` (`feature/sharing-state-subject`)
-
-**Branch:** `feature/sharing-state-subject` (**implemented**)
 
 Replaces the blocking `Monitor.Wait` in `Acquire()` with a `BehaviorSubject<NodeMap?>` per name. `GenICamCapture` calls `subject.OnNext(nodeMap)` on startup and `subject.OnNext(null)` on teardown. Feature operators call `Acquire(name)` which returns an `IObservable<NodeMap>` — filters nulls, `.Take(1)`, `.Timeout(10 s)`. The `Observable.Using` + blocking acquire becomes `Acquire().SelectMany(map => ...)`.
 
@@ -125,36 +111,7 @@ Replaces the blocking `Monitor.Wait` in `Acquire()` with a `BehaviorSubject<Node
 
 **Trade-off:** The `NodeMap` is still a shared mutable object — concurrent `GCReadPort`/`GCWritePort` calls from multiple feature operators remain possible (safe per GenTL spec, but not serialized).
 
----
-
-### Connection sharing — Alternative B: Harp-style message bus (`feature/harp-style`)
-
-**Branch:** `feature/harp-style` (parked at `main` tip, not yet implemented)
-
-A fundamentally different model inspired by how Harp devices work in Bonsai. A single `GenICamDevice` node owns the camera connection. All feature interactions are expressed as messages:
-
-```csharp
-public class GenICamMessage
-{
-    public string FeatureName { get; }
-    public string? Payload { get; }  // null = read request, non-null = write value or read response
-}
-```
-
-```
-Timer ──► CreateReadMessage("ExposureTime") ──┐
-                                               ├──► GenICamDevice ──► FilterMessage("ExposureTime") ──► ParseFloat
-upstream ──► CreateWriteMessage("Gain") ───────┘         │
-                                                          └──► (all messages — loggable, replayable)
-```
-
-`GenICamDevice : Combinator<GenICamMessage, GenICamMessage>` is the only node that touches `GCReadPort`/`GCWritePort`. It dispatches messages on its own thread, serializing all camera access naturally.
-
-**Rationale:** No `GenICamConnectionManager`, no static state, no blocking. All camera traffic flows through one observable — trivially loggable, replayable, and debuggable. Concurrent access is serialized by the message queue rather than relying on producer thread-safety. `GenICamCapture` could eventually be absorbed as `GenICamDevice` with a `StartAcquisition` message, unifying frame acquisition and feature access on one stream.
-
-**Trade-off:** Every feature read/write requires a `CreateMessage → GenICamDevice → Filter → Parse` chain instead of one node. Acceptable for power users; may be too verbose for casual Bonsai workflows.
-
-#### pIsImplemented / pIsAvailable guards
+### pIsImplemented / pIsAvailable guards
 
 Some features declare a `<pIsImplemented>` or `<pIsAvailable>` element pointing to another node (typically a `MaskedIntReg`) that evaluates to 0 when the hardware does not support that feature on a given device variant. The GenTL producer enforces this at the `GCWritePort` level — write attempts return `GC_ERR_NOT_IMPLEMENTED` regardless of the node's declared `AccessMode`.
 

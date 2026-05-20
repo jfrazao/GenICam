@@ -23,9 +23,11 @@ dotnet build src/Bonsai.GenICam.LocalGenTLUnitTest/Bonsai.GenICam.LocalGenTLUnit
 2. **Extracts GenICam XML** from every detected camera and saves each file to `example-camera-xml/` next to the exe — verifies `GCReadPort` and XML parsing
 3. **Lists all readable features** for the target device — verifies the GenAPI NodeMap across all node types
 4. **Write/readback round-trip test** for `ExposureTime` and `Gain` — writes a test value, reads it back, then restores the original; verifies Converter formula evaluation and the write path
-5. **Captures 5 frames** from the target device and prints dimensions — verifies the buffer acquisition loop and `IplImage` construction
+5. **Captures 5 frames** from the target device and prints `GenICamFrame` dimensions — verifies the buffer acquisition loop and frame wrapping
+6. **Connection-sharing test 1** — runs `GenICamCapture` (name `"test1"`) and `GetFloatFeature` (connection `"test1"`) concurrently; expects 3 frames and 3 `ExposureTime` reads — verifies `BehaviorSubject` handoff and shared-connection feature reads
+7. **Connection-sharing test 2** — reads `ExposureTime` before, writes 20000 µs via `SetFloatFeature`, reads back — verifies the write path through a shared connection
 
-Running it successfully end-to-end confirms that GenTL producer loading, device enumeration, feature access, and image acquisition all work with your camera and driver.
+Running it successfully end-to-end confirms that GenTL producer loading, device enumeration, feature access, image acquisition, and connection sharing all work with your camera and driver.
 
 ## Example output
 
@@ -59,6 +61,21 @@ Capturing 5 frames from device 1...
   Frame 2: 1920x1200  depth=U8  ch=1
   ...
   Done — 5 frame(s) received.
+
+=== Connection sharing: concurrent capture + feature read ===
+  [Capture] Frame 1: 1920x1200
+  [Reader]  ExposureTime = 10000
+  [Capture] Frame 2: 1920x1200
+  [Reader]  ExposureTime = 10000
+  [Capture] Frame 3: 1920x1200
+  [Capture] Done — 3 frame(s)
+  [Reader]  ExposureTime = 10000
+  [Reader]  Done — 3 read(s)
+  Connection-sharing test 1: PASS
+
+=== Connection sharing: SetFloatFeature write+verify ===
+  Before: 10000  Written: 20000  After: 20000
+  Connection-sharing test 2: PASS
 ```
 
 ## Example XML files
