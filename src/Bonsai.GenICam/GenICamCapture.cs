@@ -90,6 +90,20 @@ namespace Bonsai.GenICam
             }
         }
 
+        private string? _name;
+        /// <summary>Gets or sets a name that allows other operators (GetFeatureNode, SetFeatureNode) to share this camera connection by setting their Connection property to the same value.</summary>
+        [Description("Optional: assign a name so GetFeatureNode/SetFeatureNode with a matching Connection property share this camera connection instead of opening a competing one.")]
+        public string? Name
+        {
+            get => _name;
+            set
+            {
+                if (_name != null) GenICamConnectionManager.UnregisterName(_name);
+                _name = string.IsNullOrWhiteSpace(value) ? null : value;
+                if (_name != null) GenICamConnectionManager.RegisterName(_name);
+            }
+        }
+
         /// <summary>Gets or sets the number of acquisition buffers to allocate.</summary>
         [Description("Number of acquisition buffers to allocate.")]
         public int NumBuffers { get; set; } = 4;
@@ -117,7 +131,6 @@ namespace Bonsai.GenICam
                 var path   = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
                 var serial = string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber;
                 var model  = string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel;
-
                 var state = new CaptureState
                 {
                     Observer = observer,
@@ -129,7 +142,8 @@ namespace Bonsai.GenICam
                     FrameTimeoutMs = FrameTimeoutMs,
                     Features = Features,
                     Cancel = new CancellationTokenSource(),
-                    SetLiveNodeMap = map => _liveNodeMap = map
+                    SetLiveNodeMap = map => _liveNodeMap = map,
+                    Name = string.IsNullOrWhiteSpace(Name) ? null : Name
                 };
 
                 var thread = new Thread(RunCapture);
@@ -156,14 +170,15 @@ namespace Bonsai.GenICam
             {
                 step = "open device";
                 var (api, system, iface, device) = OpenCamera(s);
-                using (api)
-                using (system)
-                using (iface)
-                using (device)
+                var ctx = new GenICamDeviceContext(api, system, iface, device);
+                IDisposable deviceLifetime = ctx;
+                try
                 {
                     step = "fetch device XML / build NodeMap";
-                    var nodeMap = new NodeMap(api, device.GetPort());
+                    var nodeMap = new NodeMap(ctx.Api, ctx.Port);
                     s.Features.Apply(nodeMap);
+                    if (s.Name != null)
+                        deviceLifetime = GenICamConnectionManager.Publish(s.Name, ctx, nodeMap);
                     s.SetLiveNodeMap(nodeMap);
                     step = "open data stream";
                     using (var stream = device.OpenDataStream())
@@ -193,6 +208,10 @@ namespace Bonsai.GenICam
                             stream.Stop();
                         }
                     }
+                }
+                finally
+                {
+                    deviceLifetime.Dispose();
                 }
                 s.Observer.OnCompleted();
             }
@@ -285,6 +304,7 @@ namespace Bonsai.GenICam
             public CancellationTokenSource Cancel = null!;
             public volatile GenTLDataStream? Stream;
             public Action<NodeMap?> SetLiveNodeMap = null!;
+            public string? Name;
         }
     }
 
@@ -351,6 +371,36 @@ namespace Bonsai.GenICam
                 }
             }
             catch { }
+
+            if (value is string cur && !string.IsNullOrEmpty(cur))
+            {
+                int idx = lb.Items.IndexOf(cur);
+                if (idx >= 0) lb.SelectedIndex = idx;
+            }
+
+            lb.Click += (s, e) => svc.CloseDropDown();
+            svc.DropDownControl(lb);
+
+            if (lb.SelectedIndex <= 0) return null;
+            return lb.SelectedItem as string ?? value;
+        }
+    }
+
+    internal class ConnectionNameEditor : UITypeEditor
+    {
+        public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext context) =>
+            UITypeEditorEditStyle.DropDown;
+
+        public override object? EditValue(ITypeDescriptorContext context, IServiceProvider provider, object? value)
+        {
+            var svc = provider?.GetService(typeof(IWindowsFormsEditorService)) as IWindowsFormsEditorService;
+            if (svc == null) return value;
+
+            var lb = new ListBox { SelectionMode = SelectionMode.One, Height = 120 };
+            lb.Items.Add("(none — open own connection)");
+
+            foreach (var name in GenICamConnectionManager.GetDeclaredNames())
+                lb.Items.Add(name);
 
             if (value is string cur && !string.IsNullOrEmpty(cur))
             {
