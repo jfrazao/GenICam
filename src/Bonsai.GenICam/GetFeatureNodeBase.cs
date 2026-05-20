@@ -36,6 +36,11 @@ namespace Bonsai.GenICam
         [Editor(typeof(SerialNumberEditor), typeof(UITypeEditor))]
         public string? SerialNumber { get; set; }
 
+        /// <summary>Gets or sets the name of a <see cref="GenICamCapture"/> whose connection this operator should share. When set, the camera identity properties are ignored and the operator waits for the named capture to open the device.</summary>
+        [Description("Optional: name of a GenICamCapture to share its connection with. When set, overrides ProducerPath/DeviceIndex/CameraModel/SerialNumber.")]
+        [Editor(typeof(ConnectionNameEditor), typeof(UITypeEditor))]
+        public string? Connection { get; set; }
+
         /// <summary>Gets or sets the GenICam category used to filter the <see cref="FeatureName"/> dropdown. Leave empty to browse all features.</summary>
         [Description("Optional: filter the feature list by category. Leave empty to browse all features.")]
         public string? FeatureCategory { get; set; }
@@ -56,6 +61,13 @@ namespace Bonsai.GenICam
         {
             if (string.IsNullOrWhiteSpace(FeatureName))
                 throw new InvalidOperationException($"{GetType().Name}: FeatureName must be set.");
+            if (!string.IsNullOrWhiteSpace(Connection))
+            {
+                return Observable.Using(
+                    () => GenICamConnectionManager.Acquire(Connection!)
+                          ?? throw new InvalidOperationException($"GenICamCapture named '{Connection}' did not publish a connection within the timeout."),
+                    conn => BuildReadObservable(conn.NodeMap));
+            }
             return Observable.Using(() => OpenDevice(), ctx => BuildReadObservable(new NodeMap(ctx.Api, ctx.Port)));
         }
 
