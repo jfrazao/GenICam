@@ -100,16 +100,14 @@
           <p1:PeriodMs>1000</p1:PeriodMs>
         </Combinator>
       </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:SetFeatureNode">
-            <p1:DeviceIndex>0</p1:DeviceIndex>
-            <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-            <p1:Connection>flir1</p1:Connection>
-            <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
-            <p1:FeatureName>ExposureTime</p1:FeatureName>
-          </Combinator>
-        </Builder>
+      <Expression xsi:type="Combinator">
+        <Combinator xsi:type="p1:SetFeatureNode">
+          <p1:DeviceIndex>0</p1:DeviceIndex>
+          <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
+          <p1:Connection>flir1</p1:Connection>
+          <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
+          <p1:FeatureName>ExposureTime</p1:FeatureName>
+        </Combinator>
       </Expression>
     </Nodes>
     <Edges>

@@ -42,12 +42,10 @@ namespace Bonsai.GenICam
 
         /// <summary>Gets or sets the GenICam category used to filter the <see cref="FeatureName"/> dropdown. Leave empty to browse all features.</summary>
         [Description("Optional: filter the feature list by category. Leave empty to browse all features.")]
-        [Editor(typeof(FeatureCategoryEditor), typeof(UITypeEditor))]
         public string? FeatureCategory { get; set; }
 
         /// <summary>Gets or sets the name of the GenICam feature node to write (e.g. <c>ExposureTime</c>, <c>Gain</c>).</summary>
         [Description("Name of the GenICam feature node to write (e.g. ExposureTime, Gain).")]
-        [Editor(typeof(FeatureNameEditor), typeof(UITypeEditor))]
         public string? FeatureName { get; set; }
 
         /// <summary>Gets or sets the value to write. Strings are accepted for all node types and coerced at runtime.</summary>
