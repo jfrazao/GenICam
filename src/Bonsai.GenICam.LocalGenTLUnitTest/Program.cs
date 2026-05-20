@@ -139,10 +139,10 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
 
             Console.WriteLine();
 
-            // --- Alt B (Harp-style message bus) round-trip ---
+            // --- GenICamDevice message-bus round-trip ---
             // Key: ALL messages flow through ONE device.Process() subscription so they
             // share the same open connection and writes are visible to subsequent reads.
-            Console.WriteLine("=== Alt B (Harp-style) GenICamDevice message-bus test ===");
+            Console.WriteLine("=== GenICamDevice: message-bus feature round-trip ===");
             try
             {
                 var ic = System.Globalization.CultureInfo.InvariantCulture;
@@ -188,11 +188,11 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                     Console.WriteLine($"  Restore verify  : {(restoreOk ? "PASS" : "FAIL")}");
                 }
 
-                Console.WriteLine("  Alt B test PASSED.");
+                Console.WriteLine("  Message-bus round-trip: PASSED.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  Alt B test FAILED: {ex.GetType().Name}: {ex.Message}");
+                Console.WriteLine($"  Message-bus round-trip FAILED: {ex.GetType().Name}: {ex.Message}");
                 if (ex.InnerException != null)
                     Console.WriteLine($"  Inner: {ex.InnerException.Message}");
             }
