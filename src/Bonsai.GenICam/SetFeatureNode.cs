@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Drawing.Design;
 using System.Reactive.Linq;
 using Bonsai;
 using Bonsai.GenICam.GenApi;
@@ -11,19 +12,42 @@ namespace Bonsai.GenICam
     /// Writes a value to a named GenICam feature node each time an element arrives, then passes the element through.
     /// </summary>
     [Description("Writes a value to a named GenICam feature node each time an element arrives, then passes the element through.")]
-    public class SetFeatureNode : Combinator
+    public class SetFeatureNode : Combinator, IGenICamSource
     {
+        NodeMap? IGenICamSource.LiveNodeMap => null;
+
         /// <summary>Gets or sets the path to a specific GenTL producer (.cti file). Leave empty to use the system search path.</summary>
         [Description("Path to a specific GenTL producer (.cti file). Leave empty to use the system search path.")]
         [Editor("Bonsai.Design.OpenFileNameEditor, Bonsai.Design", DesignTypes.UITypeEditor)]
         public string? ProducerPath { get; set; }
 
-        /// <summary>Gets or sets the zero-based index of the camera in the enumerated device list.</summary>
-        [Description("Zero-based index of the camera in the enumerated device list.")]
+        /// <summary>Gets or sets the zero-based index of the camera in the enumerated device list, or within the matching model group when <see cref="CameraModel"/> is set.</summary>
+        [Description("Zero-based index of the camera in the enumerated device list, or within the matching model group when CameraModel is set.")]
         public int DeviceIndex { get; set; }
+
+        /// <summary>Gets or sets the vendor+model string used to filter camera selection. Leave empty to select by <see cref="DeviceIndex"/> only.</summary>
+        [Description("Optional: select camera by vendor+model string. Leave empty to select by DeviceIndex only.")]
+        [Editor(typeof(CameraModelEditor), typeof(UITypeEditor))]
+        public string? CameraModel { get; set; }
+
+        /// <summary>Gets or sets the serial number used to identify the camera. When set, overrides <see cref="CameraModel"/> and <see cref="DeviceIndex"/>.</summary>
+        [Description("Optional: select camera by serial number. When set, overrides CameraModel and DeviceIndex.")]
+        [Editor(typeof(SerialNumberEditor), typeof(UITypeEditor))]
+        public string? SerialNumber { get; set; }
+
+        /// <summary>Gets or sets the name of a <see cref="GenICamCapture"/> whose connection this operator should share. When set, the camera identity properties are ignored.</summary>
+        [Description("Optional: name of a GenICamCapture to share its connection with. When set, overrides ProducerPath/DeviceIndex/CameraModel/SerialNumber.")]
+        [Editor(typeof(ConnectionNameEditor), typeof(UITypeEditor))]
+        public string? Connection { get; set; }
+
+        /// <summary>Gets or sets the GenICam category used to filter the <see cref="FeatureName"/> dropdown. Leave empty to browse all features.</summary>
+        [Description("Optional: filter the feature list by category. Leave empty to browse all features.")]
+        [Editor(typeof(FeatureCategoryEditor), typeof(UITypeEditor))]
+        public string? FeatureCategory { get; set; }
 
         /// <summary>Gets or sets the name of the GenICam feature node to write (e.g. <c>ExposureTime</c>, <c>Gain</c>).</summary>
         [Description("Name of the GenICam feature node to write (e.g. ExposureTime, Gain).")]
+        [Editor(typeof(FeatureNameEditor), typeof(UITypeEditor))]
         public string? FeatureName { get; set; }
 
         /// <summary>Gets or sets the value to write. Strings are accepted for all node types and coerced at runtime.</summary>
@@ -39,6 +63,15 @@ namespace Bonsai.GenICam
                 throw new InvalidOperationException("SetFeatureNode: Value must be set. To write an upstream FeatureValue directly, use SetFeatureValue instead.");
 
             string valueStr = Value;
+            string? sourceName = this.Connection;
+            if (!string.IsNullOrWhiteSpace(sourceName))
+            {
+                return Observable.Using(
+                    () => GenICamConnectionManager.Acquire(sourceName)
+                          ?? throw new InvalidOperationException($"GenICamCapture named '{sourceName}' did not publish a connection within the timeout."),
+                    conn => source.Do(_ => conn.NodeMap.Write(FeatureName!, valueStr)));
+            }
+
             return Observable.Using(
                 () => OpenDevice(),
                 ctx =>
@@ -48,38 +81,21 @@ namespace Bonsai.GenICam
                 });
         }
 
-        private DeviceContext OpenDevice()
+        private GenICamDeviceContext OpenDevice()
         {
-            var api = GenTLLoader.Load(string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath);
-            var system = new GenTLSystem(api);
-            var (_, _, iface, device) = system.FindAndOpenDevice(DeviceIndex);
-            return new DeviceContext(api, system, iface, device);
-        }
-
-        private sealed class DeviceContext : IDisposable
-        {
-            internal readonly GenTLApi Api;
-            internal readonly IntPtr Port;
-            private readonly GenTLSystem _system;
-            private readonly GenTLInterface _iface;
-            private readonly GenTLDevice _device;
-
-            internal DeviceContext(GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device)
+            var path   = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
+            var serial = string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber;
+            var model  = string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel;
+            if (serial != null || model != null)
             {
-                Api = api;
-                _system = system;
-                _iface = iface;
-                _device = device;
-                Port = device.GetPort();
+                var (api, system, iface, device) = GenTLLoader.FindAndOpenDeviceAcrossProducers(
+                    serial, model, DeviceIndex, path, DeviceAccessFlags.Control);
+                return new GenICamDeviceContext(api, system, iface, device);
             }
-
-            public void Dispose()
-            {
-                _device.Dispose();
-                _iface.Dispose();
-                _system.Dispose();
-                Api.Dispose();
-            }
+            var (a, localIndex) = GenTLLoader.ResolveAndLoad(path, DeviceIndex);
+            var sys = new GenTLSystem(a);
+            var (_, _, ifc, dev) = sys.FindAndOpenDevice(localIndex);
+            return new GenICamDeviceContext(a, sys, ifc, dev);
         }
     }
 }

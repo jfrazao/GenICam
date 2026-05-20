@@ -24,30 +24,25 @@
         </Builder>
       </Expression>
       <Expression xsi:type="Disable">
-        <Builder xsi:type="MemberSelector">
-          <Selector>Model</Selector>
+        <Builder xsi:type="Combinator">
+          <Combinator xsi:type="p1:EnumerateDevices" />
         </Builder>
       </Expression>
-      <Expression xsi:type="Combinator">
-        <Combinator xsi:type="p1:EnumerateDevices" />
+      <Expression xsi:type="Disable">
+        <Builder xsi:type="Combinator">
+          <Combinator xsi:type="rx:Merge" />
+        </Builder>
       </Expression>
-      <Expression xsi:type="Combinator">
-        <Combinator xsi:type="rx:Merge" />
-      </Expression>
-      <Expression xsi:type="MemberSelector">
-        <Selector>Model</Selector>
-      </Expression>
-      <Expression xsi:type="MemberSelector">
-        <Selector>SerialNumber</Selector>
-      </Expression>
-      <Expression xsi:type="Combinator">
-        <Combinator xsi:type="p1:GetFloatFeature">
-          <p1:DeviceIndex>0</p1:DeviceIndex>
-          <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-          <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
-          <p1:FeatureName>ExposureTime</p1:FeatureName>
-          <p1:PeriodMs>1000</p1:PeriodMs>
-        </Combinator>
+      <Expression xsi:type="Disable">
+        <Builder xsi:type="Combinator">
+          <Combinator xsi:type="p1:GetFloatFeature">
+            <p1:DeviceIndex>0</p1:DeviceIndex>
+            <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
+            <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
+            <p1:FeatureName>ExposureTime</p1:FeatureName>
+            <p1:PeriodMs>1000</p1:PeriodMs>
+          </Combinator>
+        </Builder>
       </Expression>
       <Expression xsi:type="Disable">
         <Builder xsi:type="Combinator">
@@ -57,27 +52,6 @@
             <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
             <p1:FeatureName>ExposureTime</p1:FeatureName>
             <p1:PeriodMs>1000</p1:PeriodMs>
-          </Combinator>
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:GetFeatureNode">
-            <p1:DeviceIndex>0</p1:DeviceIndex>
-            <p1:CameraModel>Allied Vision Mako U-029B</p1:CameraModel>
-            <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
-            <p1:FeatureName>ExposureTime</p1:FeatureName>
-            <p1:PeriodMs>1000</p1:PeriodMs>
-          </Combinator>
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:SetFeatureNode">
-            <p1:DeviceIndex>0</p1:DeviceIndex>
-            <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-            <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
-            <p1:FeatureName>ExposureTime</p1:FeatureName>
           </Combinator>
         </Builder>
       </Expression>
@@ -102,28 +76,49 @@
           <Combinator xsi:type="rx:SubscribeWhen" />
         </Builder>
       </Expression>
+      <Expression xsi:type="Combinator">
+        <Combinator xsi:type="p1:GenICamCapture">
+          <p1:ProducerPath />
+          <p1:DeviceIndex>0</p1:DeviceIndex>
+          <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
+          <p1:Name>flir1</p1:Name>
+          <p1:NumBuffers>4</p1:NumBuffers>
+          <p1:FrameTimeoutMs>5000</p1:FrameTimeoutMs>
+          <p1:Features />
+        </Combinator>
+      </Expression>
+      <Expression xsi:type="MemberSelector">
+        <Selector>Image</Selector>
+      </Expression>
+      <Expression xsi:type="Combinator">
+        <Combinator xsi:type="p1:GetFeatureNode">
+          <p1:DeviceIndex>0</p1:DeviceIndex>
+          <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
+          <p1:Connection>flir1</p1:Connection>
+          <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
+          <p1:FeatureName>ExposureTime</p1:FeatureName>
+          <p1:PeriodMs>1000</p1:PeriodMs>
+        </Combinator>
+      </Expression>
       <Expression xsi:type="Disable">
         <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:GenICamCapture">
-            <p1:ProducerPath />
+          <Combinator xsi:type="p1:SetFeatureNode">
             <p1:DeviceIndex>0</p1:DeviceIndex>
             <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-            <p1:NumBuffers>4</p1:NumBuffers>
-            <p1:FrameTimeoutMs>5000</p1:FrameTimeoutMs>
-            <p1:Features />
+            <p1:Connection>flir1</p1:Connection>
+            <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
+            <p1:FeatureName>ExposureTime</p1:FeatureName>
           </Combinator>
         </Builder>
       </Expression>
     </Nodes>
     <Edges>
       <Edge From="1" To="2" Label="Source1" />
-      <Edge From="2" To="3" Label="Source1" />
-      <Edge From="4" To="5" Label="Source1" />
-      <Edge From="5" To="6" Label="Source1" />
-      <Edge From="5" To="7" Label="Source1" />
+      <Edge From="3" To="4" Label="Source1" />
+      <Edge From="7" To="9" Label="Source1" />
+      <Edge From="8" To="9" Label="Source2" />
       <Edge From="10" To="11" Label="Source1" />
-      <Edge From="12" To="14" Label="Source1" />
-      <Edge From="13" To="14" Label="Source2" />
+      <Edge From="12" To="13" Label="Source1" />
     </Edges>
   </Workflow>
 </WorkflowBuilder>
