@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Drawing.Design;
+using System.Globalization;
 using System.Reactive.Linq;
 using Bonsai;
 using Bonsai.GenICam.GenApi;
@@ -10,8 +11,10 @@ namespace Bonsai.GenICam
 {
     /// <summary>
     /// Writes a value to a named GenICam feature node each time an element arrives, then passes the element through.
+    /// When the upstream element is a <see cref="FeatureValue"/> the value is taken from the element; otherwise the
+    /// static <see cref="Value"/> property is used.
     /// </summary>
-    [Description("Writes a value to a named GenICam feature node each time an element arrives, then passes the element through.")]
+    [Description("Writes a value to a named GenICam feature node each time an element arrives, then passes the element through. Connect a FeatureValue upstream to write it directly, or set the Value property for a fixed string.")]
     public class SetFeatureNode : Combinator, IGenICamSource
     {
         NodeMap? IGenICamSource.LiveNodeMap => null;
@@ -48,9 +51,17 @@ namespace Bonsai.GenICam
         [Description("Name of the GenICam feature node to write (e.g. ExposureTime, Gain).")]
         public string? FeatureName { get; set; }
 
-        /// <summary>Gets or sets the value to write. Strings are accepted for all node types and coerced at runtime.</summary>
-        [Description("Value to write. Strings are accepted for all node types and coerced at runtime.")]
+        /// <summary>Gets or sets a fixed value to write. Leave empty when connecting a <see cref="FeatureValue"/> upstream.</summary>
+        [Description("Fixed value to write. Leave empty when connecting a FeatureValue upstream.")]
         public string? Value { get; set; }
+
+        /// <summary>Writes the upstream <see cref="FeatureValue"/> to the named feature on each element and passes it through.</summary>
+        public IObservable<FeatureValue> Process(IObservable<FeatureValue> source)
+        {
+            if (string.IsNullOrWhiteSpace(FeatureName))
+                throw new InvalidOperationException("SetFeatureNode: FeatureName must be set.");
+            return BuildWriteObservable(source, FormatFeatureValue);
+        }
 
         /// <summary>Writes <see cref="Value"/> to the named feature on each element and passes each element through unchanged.</summary>
         public override IObservable<TSource> Process<TSource>(IObservable<TSource> source)
@@ -58,26 +69,38 @@ namespace Bonsai.GenICam
             if (string.IsNullOrWhiteSpace(FeatureName))
                 throw new InvalidOperationException("SetFeatureNode: FeatureName must be set.");
             if (Value == null)
-                throw new InvalidOperationException("SetFeatureNode: Value must be set. To write an upstream FeatureValue directly, use SetFeatureValue instead.");
-
+                throw new InvalidOperationException("SetFeatureNode: Value must be set, or connect a FeatureValue upstream to write it directly.");
             string valueStr = Value;
-            string? sourceName = this.Connection;
-            if (!string.IsNullOrWhiteSpace(sourceName))
-            {
-                return Observable.Using(
-                    () => GenICamConnectionManager.Acquire(sourceName)
-                          ?? throw new InvalidOperationException($"GenICamCapture named '{sourceName}' did not publish a connection within the timeout."),
-                    conn => source.Do(_ => conn.NodeMap.Write(FeatureName!, valueStr)));
-            }
+            return BuildWriteObservable(source, _ => valueStr);
+        }
 
+        private IObservable<T> BuildWriteObservable<T>(IObservable<T> source, Func<T, string> format)
+        {
+            string featureName = FeatureName!;
+            if (!string.IsNullOrWhiteSpace(Connection))
+            {
+                string conn = Connection!;
+                return Observable.Using(
+                    () => GenICamConnectionManager.Acquire(conn)
+                          ?? throw new InvalidOperationException($"GenICamCapture named '{conn}' did not publish a connection within the timeout."),
+                    c => source.Do(v => c.NodeMap.Write(featureName, format(v))));
+            }
             return Observable.Using(
                 () => OpenDevice(),
                 ctx =>
                 {
                     var map = new NodeMap(ctx.Api, ctx.Port);
-                    return source.Do(_ => map.Write(FeatureName!, valueStr));
+                    return source.Do(v => map.Write(featureName, format(v)));
                 });
         }
+
+        private static string FormatFeatureValue(FeatureValue v) => v.Value switch
+        {
+            double d => d.ToString(CultureInfo.InvariantCulture),
+            long   l => l.ToString(CultureInfo.InvariantCulture),
+            bool   b => b ? "True" : "False",
+            _        => v.Value?.ToString() ?? string.Empty
+        };
 
         private GenICamDeviceContext OpenDevice()
         {
