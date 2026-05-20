@@ -80,6 +80,8 @@ _GCInitLib = Marshal.GetDelegateForFunctionPointer<GCInitLibDelegate>(pInit);
 
 `GenTLDataStream` allocates N buffers (`DSAllocAndAnnounceBuffer`), queues them, starts acquisition. A dedicated background thread waits on the new-buffer event (`EventGetData` on `EVENT_NEW_BUFFER`), copies pixel data into an `IplImage`, re-queues the buffer, and calls `observer.OnNext`. Thread is cancelled via `CancellationToken` on dispose.
 
+**Extra copy:** on each frame, pixel data is `Buffer.MemoryCopy`'d from the native ring buffer slot into a freshly allocated `IplImage`, then the ring buffer slot is immediately requeued. Downstream operators receive an independent copy and can hold it indefinitely without stalling the camera. The cost is one allocation + memcpy per frame. A zero-copy path would wrap the native buffer directly and defer `DSQueueBuffer` until the frame is released, but requires reference-counting the ring buffer slots and risks stalling acquisition if downstream holds too many frames simultaneously.
+
 ### IplImage construction
 
 Buffer metadata (width, height, pixel format) from `DSGetBufferInfo`. Pixel format mapped to `IplDepth`/channels:
