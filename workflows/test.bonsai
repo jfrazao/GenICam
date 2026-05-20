@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <WorkflowBuilder Version="2.9.0"
                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                  xmlns:p1="clr-namespace:Bonsai.GenICam;assembly=Bonsai.GenICam"
@@ -6,117 +6,64 @@
                  xmlns="https://bonsai-rx.org/2018/workflow">
   <Workflow>
     <Nodes>
+      <!-- Node 0: Timer — triggers a feature read every second -->
       <Expression xsi:type="Combinator">
-        <Combinator xsi:type="IntProperty">
-          <Value>0</Value>
+        <Combinator xsi:type="rx:Timer">
+          <rx:Period>PT1S</rx:Period>
         </Combinator>
       </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:EnumerateDevices">
-            <p1:ProducerPath>C:\Program Files (x86)\Common Files\MVS\Runtime\Win64_x64\MvProducerU3V.cti</p1:ProducerPath>
-          </Combinator>
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="rx:Merge" />
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:EnumerateDevices" />
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="rx:Merge" />
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:GetFloatFeature">
-            <p1:DeviceIndex>0</p1:DeviceIndex>
-            <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-            <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
-            <p1:FeatureName>ExposureTime</p1:FeatureName>
-            <p1:PeriodMs>1000</p1:PeriodMs>
-          </Combinator>
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:GetIntFeature">
-            <p1:DeviceIndex>0</p1:DeviceIndex>
-            <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-            <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
-            <p1:FeatureName>ExposureTime</p1:FeatureName>
-            <p1:PeriodMs>1000</p1:PeriodMs>
-          </Combinator>
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="p1:GetFeatureNode">
-            <p1:DeviceIndex>0</p1:DeviceIndex>
-            <p1:FeatureName>AutofeatureAvailableReg</p1:FeatureName>
-            <p1:PeriodMs>1000</p1:PeriodMs>
-          </Combinator>
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="rx:Timer">
-            <rx:DueTime>PT10S</rx:DueTime>
-          </Combinator>
-        </Builder>
-      </Expression>
-      <Expression xsi:type="Disable">
-        <Builder xsi:type="Combinator">
-          <Combinator xsi:type="rx:SubscribeWhen" />
-        </Builder>
-      </Expression>
+      <!-- Node 1: CreateReadMessage — builds a ReadRequest for ExposureTime -->
       <Expression xsi:type="Combinator">
-        <Combinator xsi:type="p1:GenICamCapture">
+        <Combinator xsi:type="p1:CreateReadMessage">
+          <p1:FeatureName>ExposureTime</p1:FeatureName>
+        </Combinator>
+      </Expression>
+      <!-- Node 2: GenICamDevice — single owner; handles features + acquisition -->
+      <Expression xsi:type="Combinator">
+        <Combinator xsi:type="p1:GenICamDevice">
           <p1:ProducerPath />
           <p1:DeviceIndex>0</p1:DeviceIndex>
           <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-          <p1:Name>flir1</p1:Name>
           <p1:NumBuffers>4</p1:NumBuffers>
           <p1:FrameTimeoutMs>5000</p1:FrameTimeoutMs>
           <p1:Features />
+          <p1:AcquireFrames>true</p1:AcquireFrames>
         </Combinator>
       </Expression>
+      <!-- Node 3: FilterMessage — keep only Frame messages -->
+      <Expression xsi:type="Combinator">
+        <Combinator xsi:type="p1:FilterMessage">
+          <p1:MessageType>Frame</p1:MessageType>
+        </Combinator>
+      </Expression>
+      <!-- Node 4: ParseFrameMessage — extract GenICamFrame -->
+      <Expression xsi:type="Combinator">
+        <Combinator xsi:type="p1:ParseFrameMessage" />
+      </Expression>
+      <!-- Node 5: select the IplImage from the frame -->
       <Expression xsi:type="MemberSelector">
         <Selector>Image</Selector>
       </Expression>
+      <!-- Node 6: FilterMessage — keep ReadResponse for ExposureTime -->
       <Expression xsi:type="Combinator">
-        <Combinator xsi:type="p1:GetFeatureNode">
-          <p1:DeviceIndex>0</p1:DeviceIndex>
-          <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-          <p1:Connection>flir1</p1:Connection>
-          <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
+        <Combinator xsi:type="p1:FilterMessage">
           <p1:FeatureName>ExposureTime</p1:FeatureName>
-          <p1:PeriodMs>1000</p1:PeriodMs>
+          <p1:MessageType>ReadResponse</p1:MessageType>
         </Combinator>
       </Expression>
+      <!-- Node 7: ParseFloatMessage — extract double from ReadResponse -->
       <Expression xsi:type="Combinator">
-        <Combinator xsi:type="p1:SetFeatureNode">
-          <p1:DeviceIndex>0</p1:DeviceIndex>
-          <p1:CameraModel>FLIR Blackfly S BFS-U3-16S2M</p1:CameraModel>
-          <p1:Connection>flir1</p1:Connection>
-          <p1:FeatureCategory>AcquisitionControl</p1:FeatureCategory>
-          <p1:FeatureName>ExposureTime</p1:FeatureName>
-        </Combinator>
+        <Combinator xsi:type="p1:ParseFloatMessage" />
       </Expression>
     </Nodes>
     <Edges>
+      <Edge From="0" To="1" Label="Source1" />
       <Edge From="1" To="2" Label="Source1" />
+      <Edge From="2" To="3" Label="Source1" />
       <Edge From="3" To="4" Label="Source1" />
-      <Edge From="7" To="9" Label="Source1" />
-      <Edge From="8" To="9" Label="Source2" />
-      <Edge From="10" To="11" Label="Source1" />
-      <Edge From="12" To="13" Label="Source1" />
+      <Edge From="4" To="5" Label="Source1" />
+      <Edge From="2" To="6" Label="Source1" />
+      <Edge From="6" To="7" Label="Source1" />
     </Edges>
   </Workflow>
 </WorkflowBuilder>

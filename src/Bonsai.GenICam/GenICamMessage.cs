@@ -10,7 +10,9 @@ namespace Bonsai.GenICam
         /// <summary>Device response carrying the value that was read.</summary>
         ReadResponse,
         /// <summary>Device acknowledgement confirming a write was applied.</summary>
-        WriteAck
+        WriteAck,
+        /// <summary>A frame delivered by the acquisition loop.</summary>
+        Frame
     }
 
     /// <summary>
@@ -20,18 +22,21 @@ namespace Bonsai.GenICam
     /// </summary>
     public sealed class GenICamMessage
     {
-        /// <summary>Gets the message type (request, response, or ack).</summary>
+        /// <summary>Gets the message type (request, response, ack, or frame).</summary>
         public GenICamMessageType Type { get; }
-        /// <summary>Gets the GenICam feature name this message refers to.</summary>
+        /// <summary>Gets the GenICam feature name this message refers to. Empty for Frame messages.</summary>
         public string FeatureName { get; }
-        /// <summary>Gets the payload string: null for read requests, a value string for everything else.</summary>
+        /// <summary>Gets the payload string: null for read requests and frames, a value string for everything else.</summary>
         public string? Payload { get; }
+        /// <summary>Gets the captured frame for Frame-type messages; null for all other types.</summary>
+        public GenICamFrame? Frame { get; }
 
-        private GenICamMessage(GenICamMessageType type, string featureName, string? payload)
+        private GenICamMessage(GenICamMessageType type, string featureName, string? payload, GenICamFrame? frame = null)
         {
             Type = type;
             FeatureName = featureName;
             Payload = payload;
+            Frame = frame;
         }
 
         /// <summary>Creates a read-request message for the named feature.</summary>
@@ -48,8 +53,12 @@ namespace Bonsai.GenICam
         internal static GenICamMessage Ack(string featureName, string payload) =>
             new GenICamMessage(GenICamMessageType.WriteAck, featureName, payload);
 
+        internal static GenICamMessage FromFrame(GenICamFrame frame) =>
+            new GenICamMessage(GenICamMessageType.Frame, string.Empty, null, frame);
+
         /// <inheritdoc/>
-        public override string ToString() =>
-            Payload != null ? $"{Type}({FeatureName}={Payload})" : $"{Type}({FeatureName})";
+        public override string ToString() => Type == GenICamMessageType.Frame
+            ? $"Frame({Frame?.Width}x{Frame?.Height})"
+            : Payload != null ? $"{Type}({FeatureName}={Payload})" : $"{Type}({FeatureName})";
     }
 }

@@ -104,14 +104,16 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             catch (Exception ex) { Console.WriteLine($"  Round-trip test failed: {ex.Message}"); }
             Console.WriteLine();
 
-            // --- Capture ---
-            Console.WriteLine($"Capturing 5 frames from device {targetIndex}...");
-            var capture = new GenICamCapture { ProducerPath = producerPath, DeviceIndex = targetIndex, NumBuffers = 4, FrameTimeoutMs = 5000 };
+            // --- Capture via GenICamDevice ---
+            Console.WriteLine($"Capturing 5 frames from device {targetIndex} via GenICamDevice...");
+            var captureDevice = new GenICamDevice { ProducerPath = producerPath, DeviceIndex = targetIndex, NumBuffers = 4, FrameTimeoutMs = 5000, AcquireFrames = true };
 
             int frameCount = 0;
             var done = new ManualResetEventSlim(false);
 
-            using (capture.Generate()
+            using (captureDevice.Process(Observable.Never<GenICamMessage>())
+                .Where(m => m.Type == GenICamMessageType.Frame && m.Frame != null)
+                .Select(m => m.Frame!)
                 .Take(5)
                 .Subscribe(
                     frame =>
@@ -144,7 +146,8 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             try
             {
                 var ic = System.Globalization.CultureInfo.InvariantCulture;
-                var device = new GenICamDevice { ProducerPath = producerPath, DeviceIndex = targetIndex };
+                // AcquireFrames=false: feature-only, observable completes when source completes.
+                var device = new GenICamDevice { ProducerPath = producerPath, DeviceIndex = targetIndex, AcquireFrames = false };
 
                 // Step 1: read original ExposureTime via a single-message subscription
                 var r0 = device.Process(Observable.Return(GenICamMessage.Read("ExposureTime"))).Wait();

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Reactive.Linq;
 using Bonsai;
+using OpenCV.Net;
 
 namespace Bonsai.GenICam
 {
@@ -67,6 +68,22 @@ namespace Bonsai.GenICam
             return source
                 .Where(m => m.Type == GenICamMessageType.ReadResponse && m.Payload != null)
                 .Select(m => m.Payload!);
+        }
+    }
+
+    /// <summary>
+    /// Extracts the <see cref="GenICamFrame"/> from a <see cref="GenICamMessageType.Frame"/> message.
+    /// All non-frame messages are silently skipped.
+    /// </summary>
+    [Description("Extracts the frame from each GenICam Frame message in the stream.")]
+    public class ParseFrameMessage : Combinator<GenICamMessage, GenICamFrame>
+    {
+        /// <inheritdoc/>
+        public override IObservable<GenICamFrame> Process(IObservable<GenICamMessage> source)
+        {
+            return source
+                .Where(m => m.Type == GenICamMessageType.Frame && m.Frame != null)
+                .Select(m => m.Frame!);
         }
     }
 }
