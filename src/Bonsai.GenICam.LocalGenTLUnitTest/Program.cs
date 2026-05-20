@@ -135,6 +135,51 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                 done.Wait();
             }
 
+            // --- Alt A: BehaviorSubject connection-sharing test ---
+            Console.WriteLine("=== Alt A (BehaviorSubject): concurrent capture + feature read ===");
+            try
+            {
+                var captureA = new GenICamCapture
+                {
+                    ProducerPath  = producerPath,
+                    DeviceIndex   = targetIndex,
+                    NumBuffers    = 4,
+                    FrameTimeoutMs = 5000,
+                    Name          = "altA"
+                };
+                var reader = new GetFloatFeature
+                {
+                    Connection  = "altA",
+                    FeatureName = "ExposureTime",
+                    PeriodMs    = 500
+                };
+
+                var countdown = new System.Threading.CountdownEvent(2);
+                int fCount = 0, rCount = 0;
+
+                var subCapture = captureA.Generate().Take(3).Subscribe(
+                    f  => { fCount++; Console.WriteLine($"  [Capture] Frame {fCount}: {f.Width}x{f.Height}"); },
+                    ex => { Console.WriteLine($"  [Capture] ERROR: {ex.Message}"); countdown.Signal(); },
+                    ()  => { Console.WriteLine($"  [Capture] Done — {fCount} frame(s)"); countdown.Signal(); });
+
+                var subReader = reader.Generate().Take(3).Subscribe(
+                    v  => { rCount++; Console.WriteLine($"  [Reader]  ExposureTime = {v}"); },
+                    ex => { Console.WriteLine($"  [Reader]  ERROR: {ex.Message}"); countdown.Signal(); },
+                    ()  => { Console.WriteLine($"  [Reader]  Done — {rCount} read(s)"); countdown.Signal(); });
+
+                bool allDone = countdown.Wait(TimeSpan.FromSeconds(30));
+                subCapture.Dispose();
+                subReader.Dispose();
+
+                Console.WriteLine($"  Alt A test: {(allDone && fCount == 3 && rCount == 3 ? "PASS" : "FAIL")}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Alt A test FAILED: {ex.GetType().Name}: {ex.Message}");
+                if (ex.InnerException != null)
+                    Console.WriteLine($"  Inner: {ex.InnerException.Message}");
+            }
+
             Console.WriteLine();
             Console.WriteLine("Test complete.");
         }

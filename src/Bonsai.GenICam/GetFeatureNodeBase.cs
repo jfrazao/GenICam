@@ -74,22 +74,11 @@ namespace Bonsai.GenICam
                              .Select(_ => Convert(map.Read(FeatureName!)));
         }
 
-        private GenICamDeviceContext OpenDevice()
-        {
-            var path   = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
-            var serial = string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber;
-            var model  = string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel;
-            if (serial != null || model != null)
-            {
-                var (api, system, iface, device) = GenTLLoader.FindAndOpenDeviceAcrossProducers(
-                    serial, model, DeviceIndex, path, DeviceAccessFlags.ReadOnly);
-                return new GenICamDeviceContext(api, system, iface, device);
-            }
-            var (a, localIndex) = GenTLLoader.ResolveAndLoad(path, DeviceIndex);
-            var sys = new GenTLSystem(a);
-            var (_, _, ifc, dev) = sys.FindAndOpenDevice(localIndex, DeviceAccessFlags.ReadOnly);
-            return new GenICamDeviceContext(a, sys, ifc, dev);
-        }
+        private GenICamDeviceContext OpenDevice() => GenICamDeviceContext.Open(
+            string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath,
+            string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber,
+            string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel,
+            DeviceIndex, DeviceAccessFlags.ReadOnly);
     }
 
     internal sealed class GenICamDeviceContext : IDisposable
@@ -107,6 +96,22 @@ namespace Bonsai.GenICam
             _iface = iface;
             _device = device;
             Port = device.GetPort();
+        }
+
+        internal static GenICamDeviceContext Open(
+            string? path, string? serial, string? model, int deviceIndex,
+            DeviceAccessFlags flags = DeviceAccessFlags.Control)
+        {
+            if (serial != null || model != null)
+            {
+                var (api, system, iface, device) = GenTLLoader.FindAndOpenDeviceAcrossProducers(
+                    serial, model, deviceIndex, path, flags);
+                return new GenICamDeviceContext(api, system, iface, device);
+            }
+            var (a, localIndex) = GenTLLoader.ResolveAndLoad(path, deviceIndex);
+            var sys = new GenTLSystem(a);
+            var (_, _, ifc, dev) = sys.FindAndOpenDevice(localIndex, flags);
+            return new GenICamDeviceContext(a, sys, ifc, dev);
         }
 
         public void Dispose()
