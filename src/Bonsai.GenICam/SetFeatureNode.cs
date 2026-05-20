@@ -33,12 +33,18 @@ namespace Bonsai.GenICam
         /// <summary>Writes <see cref="Value"/> to the named feature on each element and passes each element through unchanged.</summary>
         public override IObservable<TSource> Process<TSource>(IObservable<TSource> source)
         {
+            if (string.IsNullOrWhiteSpace(FeatureName))
+                throw new InvalidOperationException("SetFeatureNode: FeatureName must be set.");
+            if (Value == null)
+                throw new InvalidOperationException("SetFeatureNode: Value must be set. To write an upstream FeatureValue directly, use SetFeatureValue instead.");
+
+            string valueStr = Value;
             return Observable.Using(
                 () => OpenDevice(),
                 ctx =>
                 {
                     var map = new NodeMap(ctx.Api, ctx.Port);
-                    return source.Do(_ => map.Write(FeatureName!, Value ?? string.Empty));
+                    return source.Do(_ => map.Write(FeatureName!, valueStr));
                 });
         }
 

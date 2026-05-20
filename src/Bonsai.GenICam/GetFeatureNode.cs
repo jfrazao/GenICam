@@ -33,6 +33,8 @@ namespace Bonsai.GenICam
         /// <summary>Returns an observable sequence that reads <see cref="FeatureName"/> once (when <see cref="PeriodMs"/> is zero) or repeatedly at the specified interval.</summary>
         public override IObservable<FeatureValue> Generate()
         {
+            if (string.IsNullOrWhiteSpace(FeatureName))
+                throw new InvalidOperationException("GetFeatureNode: FeatureName must be set.");
             return Observable.Using(
                 () => OpenDevice(),
                 ctx =>

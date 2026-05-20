@@ -54,6 +54,8 @@ namespace Bonsai.GenICam
         /// <inheritdoc/>
         public override IObservable<T> Generate()
         {
+            if (string.IsNullOrWhiteSpace(FeatureName))
+                throw new InvalidOperationException($"{GetType().Name}: FeatureName must be set.");
             return Observable.Using(() => OpenDevice(), ctx => BuildReadObservable(new NodeMap(ctx.Api, ctx.Port)));
         }
 

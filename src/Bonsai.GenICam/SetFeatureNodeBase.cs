@@ -51,6 +51,8 @@ namespace Bonsai.GenICam
         /// <inheritdoc/>
         public override IObservable<T> Process(IObservable<T> source)
         {
+            if (string.IsNullOrWhiteSpace(FeatureName))
+                throw new InvalidOperationException($"{GetType().Name}: FeatureName must be set.");
             return Observable.Using(
                 () => OpenDevice(),
                 ctx =>
@@ -116,5 +118,21 @@ namespace Bonsai.GenICam
     {
         /// <inheritdoc/>
         protected override string Format(string v) => v;
+    }
+
+    /// <summary>
+    /// Writes an upstream <see cref="FeatureValue"/> (e.g. from <see cref="GetFeatureNode"/>) back to a GenICam feature node, then passes the element through.
+    /// </summary>
+    [Description("Writes an upstream FeatureValue (e.g. from GetFeatureNode) to a GenICam feature node, then passes the element through.")]
+    public class SetFeatureValue : SetFeatureNodeBase<FeatureValue>
+    {
+        /// <inheritdoc/>
+        protected override string Format(FeatureValue v) => v.Value switch
+        {
+            double d => d.ToString(CultureInfo.InvariantCulture),
+            long   l => l.ToString(CultureInfo.InvariantCulture),
+            bool   b => b ? "True" : "False",
+            _        => v.Value?.ToString() ?? string.Empty
+        };
     }
 }
