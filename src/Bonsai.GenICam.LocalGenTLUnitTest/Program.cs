@@ -135,21 +135,21 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                 done.Wait();
             }
 
-            // --- Alt A: BehaviorSubject connection-sharing test ---
-            Console.WriteLine("=== Alt A (BehaviorSubject): concurrent capture + feature read ===");
+            // --- Connection-sharing test 1: concurrent capture + feature read ---
+            Console.WriteLine("=== Connection sharing: concurrent capture + feature read ===");
             try
             {
-                var captureA = new GenICamCapture
+                var capture1 = new GenICamCapture
                 {
                     ProducerPath  = producerPath,
                     DeviceIndex   = targetIndex,
                     NumBuffers    = 4,
                     FrameTimeoutMs = 5000,
-                    Name          = "altA"
+                    Name          = "test1"
                 };
                 var reader = new GetFloatFeature
                 {
-                    Connection  = "altA",
+                    Connection  = "test1",
                     FeatureName = "ExposureTime",
                     PeriodMs    = 500
                 };
@@ -157,7 +157,7 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                 var countdown = new System.Threading.CountdownEvent(2);
                 int fCount = 0, rCount = 0;
 
-                var subCapture = captureA.Generate().Take(3).Subscribe(
+                var subCapture = capture1.Generate().Take(3).Subscribe(
                     f  => { fCount++; Console.WriteLine($"  [Capture] Frame {fCount}: {f.Width}x{f.Height}"); },
                     ex => { Console.WriteLine($"  [Capture] ERROR: {ex.Message}"); countdown.Signal(); },
                     ()  => { Console.WriteLine($"  [Capture] Done — {fCount} frame(s)"); countdown.Signal(); });
@@ -171,13 +171,63 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                 subCapture.Dispose();
                 subReader.Dispose();
 
-                Console.WriteLine($"  Alt A test: {(allDone && fCount == 3 && rCount == 3 ? "PASS" : "FAIL")}");
+                Console.WriteLine($"  Connection-sharing test 1: {(allDone && fCount == 3 && rCount == 3 ? "PASS" : "FAIL")}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  Alt A test FAILED: {ex.GetType().Name}: {ex.Message}");
+                Console.WriteLine($"  Connection-sharing test 1 FAILED: {ex.GetType().Name}: {ex.Message}");
                 if (ex.InnerException != null)
                     Console.WriteLine($"  Inner: {ex.InnerException.Message}");
+            }
+
+            // --- Connection-sharing test 2: SetFloatFeature write+verify ---
+            Console.WriteLine("=== Connection sharing: SetFloatFeature write+verify ===");
+            try
+            {
+                const double targetExp = 20000.0;
+                var capture2 = new GenICamCapture
+                {
+                    ProducerPath   = producerPath,
+                    DeviceIndex    = targetIndex,
+                    NumBuffers     = 4,
+                    FrameTimeoutMs = 5000,
+                    Name           = "test2"
+                };
+                var readOp  = new GetFloatFeature { Connection = "test2", FeatureName = "ExposureTime", PeriodMs = 0 };
+                var writeOp = new SetFloatFeature { Connection = "test2", FeatureName = "ExposureTime" };
+
+                double beforeVal = double.NaN, afterVal = double.NaN;
+                string? testError = null;
+                var done2 = new System.Threading.CountdownEvent(1);
+
+                var capSub = capture2.Generate().Subscribe(_ => { }, ex => { }, () => { });
+
+                var testSub = readOp.Generate()
+                    .Take(1)
+                    .Do(v => beforeVal = v)
+                    .SelectMany(_ => writeOp.Process(Observable.Return(targetExp)).Take(1))
+                    .SelectMany(_ => readOp.Generate().Take(1))
+                    .Subscribe(
+                        v => afterVal = v,
+                        ex => { testError = ex.Message; done2.Signal(); },
+                        () => done2.Signal());
+
+                bool completed = done2.Wait(TimeSpan.FromSeconds(30));
+                testSub.Dispose();
+                capSub.Dispose();
+
+                if (!completed || testError != null)
+                    Console.WriteLine($"  Connection-sharing test 2 FAIL — {testError ?? "timeout"}");
+                else
+                {
+                    bool pass = Math.Abs(afterVal - targetExp) < 1.0;
+                    Console.WriteLine($"  Before: {beforeVal}  Written: {targetExp}  After: {afterVal}");
+                    Console.WriteLine($"  Connection-sharing test 2: {(pass ? "PASS" : "FAIL")}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Connection-sharing test 2 exception: {ex.Message}");
             }
 
             Console.WriteLine();
