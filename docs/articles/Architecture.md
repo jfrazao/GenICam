@@ -117,7 +117,7 @@ The solution is a named connection slot: `GenICamCapture` exposes a `Name` prope
 
 ### Connection sharing — Alternative A: `BehaviorSubject` (`feature/sharing-state-subject`)
 
-**Branch:** `feature/sharing-state-subject` (not yet created, branches from `main`)
+**Branch:** `feature/sharing-state-subject` (**implemented**)
 
 Replaces the blocking `Monitor.Wait` in `Acquire()` with a `BehaviorSubject<NodeMap?>` per name. `GenICamCapture` calls `subject.OnNext(nodeMap)` on startup and `subject.OnNext(null)` on teardown. Feature operators call `Acquire(name)` which returns an `IObservable<NodeMap>` — filters nulls, `.Take(1)`, `.Timeout(10 s)`. The `Observable.Using` + blocking acquire becomes `Acquire().SelectMany(map => ...)`.
 
