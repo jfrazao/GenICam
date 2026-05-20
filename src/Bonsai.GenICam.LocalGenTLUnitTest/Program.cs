@@ -136,6 +136,65 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             }
 
             Console.WriteLine();
+
+            // --- Alt B (Harp-style message bus) round-trip ---
+            // Key: ALL messages flow through ONE device.Process() subscription so they
+            // share the same open connection and writes are visible to subsequent reads.
+            Console.WriteLine("=== Alt B (Harp-style) GenICamDevice message-bus test ===");
+            try
+            {
+                var ic = System.Globalization.CultureInfo.InvariantCulture;
+                var device = new GenICamDevice { ProducerPath = producerPath, DeviceIndex = targetIndex };
+
+                // Step 1: read original ExposureTime via a single-message subscription
+                var r0 = device.Process(Observable.Return(GenICamMessage.Read("ExposureTime"))).Wait();
+                Console.WriteLine($"  Initial read: {r0}");
+
+                if (r0.Type == GenICamMessageType.ReadResponse && r0.Payload != null)
+                {
+                    double original = double.Parse(r0.Payload, ic);
+                    double newVal   = Math.Round(original * 1.1, 2);
+
+                    // Step 2: single subscription — read, write, readback, restore, verify
+                    // All five messages share ONE device connection and ONE EventLoopScheduler,
+                    // so writes are visible to the subsequent reads.
+                    var msgs = new[]
+                    {
+                        GenICamMessage.Read("ExposureTime"),
+                        GenICamMessage.Write("ExposureTime", newVal.ToString(ic)),
+                        GenICamMessage.Read("ExposureTime"),
+                        GenICamMessage.Write("ExposureTime", original.ToString(ic)),
+                        GenICamMessage.Read("ExposureTime"),
+                    };
+                    var responses = device.Process(msgs.ToObservable()).ToArray().Wait();
+                    Console.WriteLine($"  [0] read before write : {responses[0]}");
+                    Console.WriteLine($"  [1] write {newVal}     : {responses[1]}");
+                    Console.WriteLine($"  [2] readback after write: {responses[2]}");
+                    Console.WriteLine($"  [3] restore {original} : {responses[3]}");
+                    Console.WriteLine($"  [4] readback after restore: {responses[4]}");
+
+                    // Allow 1-unit tolerance: integer cameras truncate float writes.
+                    double writtenBack  = double.TryParse(responses[2].Payload, System.Globalization.NumberStyles.Any, ic, out var wb) ? wb : double.NaN;
+                    double restoredBack = double.TryParse(responses[4].Payload, System.Globalization.NumberStyles.Any, ic, out var rb) ? rb : double.NaN;
+                    bool writeRoundTrip = responses[1].Type == GenICamMessageType.WriteAck
+                                      && responses[2].Type == GenICamMessageType.ReadResponse
+                                      && Math.Abs(writtenBack - newVal) < 1.0;
+                    bool restoreOk = responses[4].Type == GenICamMessageType.ReadResponse
+                                  && Math.Abs(restoredBack - original) < 1.0;
+                    Console.WriteLine($"  Write round-trip: {(writeRoundTrip ? "PASS" : "FAIL")}");
+                    Console.WriteLine($"  Restore verify  : {(restoreOk ? "PASS" : "FAIL")}");
+                }
+
+                Console.WriteLine("  Alt B test PASSED.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Alt B test FAILED: {ex.GetType().Name}: {ex.Message}");
+                if (ex.InnerException != null)
+                    Console.WriteLine($"  Inner: {ex.InnerException.Message}");
+            }
+
+            Console.WriteLine();
             Console.WriteLine("Test complete.");
         }
     }
