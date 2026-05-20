@@ -74,22 +74,11 @@ namespace Bonsai.GenICam
                 });
         }
 
-        private GenICamDeviceContext OpenDevice()
-        {
-            var path   = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
-            var serial = string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber;
-            var model  = string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel;
-            if (serial != null || model != null)
-            {
-                var (api, system, iface, device) = GenTLLoader.FindAndOpenDeviceAcrossProducers(
-                    serial, model, DeviceIndex, path, DeviceAccessFlags.Control);
-                return new GenICamDeviceContext(api, system, iface, device);
-            }
-            var (a, localIndex) = GenTLLoader.ResolveAndLoad(path, DeviceIndex);
-            var sys = new GenTLSystem(a);
-            var (_, _, ifc, dev) = sys.FindAndOpenDevice(localIndex);
-            return new GenICamDeviceContext(a, sys, ifc, dev);
-        }
+        private GenICamDeviceContext OpenDevice() => GenICamDeviceContext.Open(
+            string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath,
+            string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber,
+            string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel,
+            DeviceIndex);
     }
 
     /// <summary>
