@@ -104,14 +104,16 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             catch (Exception ex) { Console.WriteLine($"  Round-trip test failed: {ex.Message}"); }
             Console.WriteLine();
 
-            // --- Capture ---
-            Console.WriteLine($"Capturing 5 frames from device {targetIndex}...");
-            var capture = new GenICamCapture { ProducerPath = producerPath, DeviceIndex = targetIndex, NumBuffers = 4, FrameTimeoutMs = 5000 };
+            // --- Capture via GenICamDevice ---
+            Console.WriteLine($"Capturing 5 frames from device {targetIndex} via GenICamDevice...");
+            var captureDevice = new GenICamDevice { ProducerPath = producerPath, DeviceIndex = targetIndex, NumBuffers = 4, FrameTimeoutMs = 5000, AcquireFrames = true };
 
             int frameCount = 0;
             var done = new ManualResetEventSlim(false);
 
-            using (capture.Generate()
+            using (captureDevice.Process(Observable.Never<GenICamMessage>())
+                .Where(m => m.Type == GenICamMessageType.Frame && m.Frame != null)
+                .Select(m => m.Frame!)
                 .Take(5)
                 .Subscribe(
                     frame =>
@@ -133,6 +135,66 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                     }))
             {
                 done.Wait();
+            }
+
+            Console.WriteLine();
+
+            // --- GenICamDevice message-bus round-trip ---
+            // Key: ALL messages flow through ONE device.Process() subscription so they
+            // share the same open connection and writes are visible to subsequent reads.
+            Console.WriteLine("=== GenICamDevice: message-bus feature round-trip ===");
+            try
+            {
+                var ic = System.Globalization.CultureInfo.InvariantCulture;
+                // AcquireFrames=false: feature-only, observable completes when source completes.
+                var device = new GenICamDevice { ProducerPath = producerPath, DeviceIndex = targetIndex, AcquireFrames = false };
+
+                // Step 1: read original ExposureTime via a single-message subscription
+                var r0 = device.Process(Observable.Return(GenICamMessage.Read("ExposureTime"))).Wait();
+                Console.WriteLine($"  Initial read: {r0}");
+
+                if (r0.Type == GenICamMessageType.ReadResponse && r0.Payload != null)
+                {
+                    double original = double.Parse(r0.Payload, ic);
+                    double newVal   = Math.Round(original * 1.1, 2);
+
+                    // Step 2: single subscription — read, write, readback, restore, verify
+                    // All five messages share ONE device connection and ONE EventLoopScheduler,
+                    // so writes are visible to the subsequent reads.
+                    var msgs = new[]
+                    {
+                        GenICamMessage.Read("ExposureTime"),
+                        GenICamMessage.Write("ExposureTime", newVal.ToString(ic)),
+                        GenICamMessage.Read("ExposureTime"),
+                        GenICamMessage.Write("ExposureTime", original.ToString(ic)),
+                        GenICamMessage.Read("ExposureTime"),
+                    };
+                    var responses = device.Process(msgs.ToObservable()).ToArray().Wait();
+                    Console.WriteLine($"  [0] read before write : {responses[0]}");
+                    Console.WriteLine($"  [1] write {newVal}     : {responses[1]}");
+                    Console.WriteLine($"  [2] readback after write: {responses[2]}");
+                    Console.WriteLine($"  [3] restore {original} : {responses[3]}");
+                    Console.WriteLine($"  [4] readback after restore: {responses[4]}");
+
+                    // Allow 1-unit tolerance: integer cameras truncate float writes.
+                    double writtenBack  = double.TryParse(responses[2].Payload, System.Globalization.NumberStyles.Any, ic, out var wb) ? wb : double.NaN;
+                    double restoredBack = double.TryParse(responses[4].Payload, System.Globalization.NumberStyles.Any, ic, out var rb) ? rb : double.NaN;
+                    bool writeRoundTrip = responses[1].Type == GenICamMessageType.WriteAck
+                                      && responses[2].Type == GenICamMessageType.ReadResponse
+                                      && Math.Abs(writtenBack - newVal) < 1.0;
+                    bool restoreOk = responses[4].Type == GenICamMessageType.ReadResponse
+                                  && Math.Abs(restoredBack - original) < 1.0;
+                    Console.WriteLine($"  Write round-trip: {(writeRoundTrip ? "PASS" : "FAIL")}");
+                    Console.WriteLine($"  Restore verify  : {(restoreOk ? "PASS" : "FAIL")}");
+                }
+
+                Console.WriteLine("  Message-bus round-trip: PASSED.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Message-bus round-trip FAILED: {ex.GetType().Name}: {ex.Message}");
+                if (ex.InnerException != null)
+                    Console.WriteLine($"  Inner: {ex.InnerException.Message}");
             }
 
             Console.WriteLine();
