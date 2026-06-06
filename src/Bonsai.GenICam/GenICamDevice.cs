@@ -121,6 +121,17 @@ namespace Bonsai.GenICam
                         cancel.Cancel();
                         acqState?.Stream?.InterruptWait();
                         featureSub.Dispose();
+                        // Drain the scheduler before disposing it. ScheduledObserver.Run
+                        // reschedules itself recursively via Schedule(); if the scheduler is
+                        // already disposed when that call lands it throws ObjectDisposedException
+                        // on the scheduler thread — an unhandled exception that crashes the
+                        // process. The sentinel is queued after featureSub's cleanup, so when
+                        // it fires the queue is empty and disposing the scheduler is safe.
+                        using (var drained = new ManualResetEventSlim(false))
+                        {
+                            scheduler.Schedule(() => drained.Set());
+                            drained.Wait(TimeSpan.FromSeconds(2));
+                        }
                         scheduler.Dispose();
                         acqThread?.Join(5000);
                         cancel.Dispose();
@@ -246,9 +257,19 @@ namespace Bonsai.GenICam
                 return new GenICamDeviceContext(api, system, iface, device);
             }
             var (a, localIndex) = GenTLLoader.ResolveAndLoad(path, DeviceIndex);
-            var sys = new GenTLSystem(a);
-            var (_, _, ifc, dev) = sys.FindAndOpenDevice(localIndex);
-            return new GenICamDeviceContext(a, sys, ifc, dev);
+            GenTLSystem? sys = null;
+            try
+            {
+                sys = new GenTLSystem(a);
+                var (_, _, ifc, dev) = sys.FindAndOpenDevice(localIndex);
+                return new GenICamDeviceContext(a, sys, ifc, dev);
+            }
+            catch
+            {
+                sys?.Dispose();
+                a.Dispose();
+                throw;
+            }
         }
 
         private sealed class AcqState
