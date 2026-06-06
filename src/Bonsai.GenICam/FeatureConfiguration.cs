@@ -781,33 +781,43 @@ namespace Bonsai.GenICam
         {
             var path = string.IsNullOrWhiteSpace(_source.ProducerPath) ? null : _source.ProducerPath;
             var (api, localIndex) = GenTLLoader.ResolveAndLoad(path, _source.DeviceIndex);
-            var system = new GenTLSystem(api);
-
-            (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) t;
-            if (!string.IsNullOrEmpty(_source.SerialNumber))
-                t = system.FindAndOpenDeviceBySerial(_source.SerialNumber!, DeviceAccessFlags.Control);
-            else if (!string.IsNullOrEmpty(_source.CameraModel))
-                t = system.FindAndOpenDeviceByModel(_source.CameraModel!, localIndex, DeviceAccessFlags.Control);
-            else
-                t = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.Control);
-
-            string TryGet(DeviceInfoCmd cmd)
-            { try { return t.iface.GetDeviceInfoString(t.devId, cmd); } catch { return string.Empty; } }
-
-            var info = new DeviceInfo
+            GenTLSystem? system = null;
+            try
             {
-                GlobalIndex   = _source.DeviceIndex,
-                ID            = t.devId,
-                InterfaceID   = t.ifaceId,
-                ProducerPath  = api.ProducerPath,
-                Vendor        = TryGet(DeviceInfoCmd.Vendor),
-                Model         = TryGet(DeviceInfoCmd.Model),
-                SerialNumber  = TryGet(DeviceInfoCmd.SerialNumber),
-                TLType        = TryGet(DeviceInfoCmd.TLType),
-                DisplayName   = TryGet(DeviceInfoCmd.DisplayName)
-            };
-            var map = new NodeMap(api, t.device.GetPort());
-            return new DeviceContext(api, system, t.iface, t.device, map, info);
+                system = new GenTLSystem(api);
+
+                (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) t;
+                if (!string.IsNullOrEmpty(_source.SerialNumber))
+                    t = system.FindAndOpenDeviceBySerial(_source.SerialNumber!, DeviceAccessFlags.Control);
+                else if (!string.IsNullOrEmpty(_source.CameraModel))
+                    t = system.FindAndOpenDeviceByModel(_source.CameraModel!, localIndex, DeviceAccessFlags.Control);
+                else
+                    t = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.Control);
+
+                string TryGet(DeviceInfoCmd cmd)
+                { try { return t.iface.GetDeviceInfoString(t.devId, cmd); } catch { return string.Empty; } }
+
+                var info = new DeviceInfo
+                {
+                    GlobalIndex   = _source.DeviceIndex,
+                    ID            = t.devId,
+                    InterfaceID   = t.ifaceId,
+                    ProducerPath  = api.ProducerPath,
+                    Vendor        = TryGet(DeviceInfoCmd.Vendor),
+                    Model         = TryGet(DeviceInfoCmd.Model),
+                    SerialNumber  = TryGet(DeviceInfoCmd.SerialNumber),
+                    TLType        = TryGet(DeviceInfoCmd.TLType),
+                    DisplayName   = TryGet(DeviceInfoCmd.DisplayName)
+                };
+                var map = new NodeMap(api, t.device.GetPort());
+                return new DeviceContext(api, system, t.iface, t.device, map, info);
+            }
+            catch
+            {
+                system?.Dispose();
+                api.Dispose();
+                throw;
+            }
         }
 
         private sealed class DeviceContext : IDisposable

@@ -39,9 +39,19 @@ namespace Bonsai.GenICam
         {
             var (api, localIndex) = GenTLLoader.ResolveAndLoad(
                 string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath, DeviceIndex);
-            var system = new GenTLSystem(api);
-            var (_, _, iface, device) = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.ReadOnly);
-            return new DeviceContext(api, system, iface, device);
+            GenTLSystem? system = null;
+            try
+            {
+                system = new GenTLSystem(api);
+                var (_, _, iface, device) = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.ReadOnly);
+                return new DeviceContext(api, system, iface, device);
+            }
+            catch
+            {
+                system?.Dispose();
+                api.Dispose();
+                throw;
+            }
         }
 
         private sealed class DeviceContext : IDisposable

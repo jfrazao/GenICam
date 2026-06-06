@@ -20,7 +20,9 @@ namespace Bonsai.GenICam
 
             try
             {
-                var system = new GenTLSystem(api);
+                // 'using' ensures TLClose() is always called — even when all access-mode
+                // attempts fail — so the producer can cleanly re-enumerate on the next call.
+                using var system = new GenTLSystem(api);
 
                 // Try read-only first, then control, then exclusive access
                 GenTLInterface iface;
@@ -43,7 +45,6 @@ namespace Bonsai.GenICam
                 {
                     device.Dispose();
                     iface.Dispose();
-                    system.Dispose();
                 }
             }
             finally
