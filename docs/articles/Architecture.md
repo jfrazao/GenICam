@@ -33,8 +33,8 @@ src/Bonsai.GenICam/
 ├── CreateWriteMessage.cs      # Combinator — emits a WriteRequest message; typed overloads for
 │                              #   string, double, long, bool, FeatureValue
 ├── FilterMessage.cs           # Combinator — passes messages matching FeatureName and/or MessageType
-├── ParseMessage.cs            # ParseFloatMessage / ParseIntMessage / ParseBoolMessage /
-│                              #   ParseStringMessage / ParseFrameMessage — typed extractors
+├── ParseFeature.cs            # ParseFeature — strongly typed output edge (double/long/bool/string)
+│                              #   via ExpressionBuilder; non-matching messages silently skipped
 ├── EnumerateDevices.cs        # Source<DeviceInfo[]> — lists cameras
 ├── ListFeatureValues.cs       # Source<FeatureValue[]> — reads all readable features
 ├── FeatureConfiguration.cs    # FeatureOverride list, editor form, UITypeEditors,
@@ -43,7 +43,7 @@ src/Bonsai.GenICam/
 ├── GenICamXmlExtractor.cs     # Static helper — fetches raw GenICam XML from a device
 │
 ├── DeviceInfo.cs              # Struct: index, vendor, model, serial, TL type
-├── FeatureValue.cs            # Discriminated union: int/double/string/bool/enum
+├── FeatureValue.cs            # FeatureValueType enum + FeatureValue discriminated union: int/double/string/bool/enum
 │
 ├── GenTL/
 │   ├── GenTLLoader.cs          # Scans GENICAM_GENTL64_PATH, loads .cti files
@@ -106,15 +106,15 @@ There is no connection manager or sharing mechanism. A single `GenICamDevice` no
 - Feature requests (`ReadRequest`, `WriteRequest`) arrive on the input stream and are dispatched on an internal `EventLoopScheduler` — all `GCReadPort`/`GCWritePort` calls are serialized on one thread.
 - The device emits `ReadResponse`, `WriteAck`, and (when `AcquireFrames = true`) `Frame` messages on a single output stream.
 - When `AcquireFrames` is true a second background thread runs the acquisition loop concurrently with the scheduler, pushing `Frame` messages via a synchronized observer.
-- Downstream operators use `FilterMessage` and the `Parse*` operators to route and extract values from the mixed output stream.
+- Downstream operators use `FilterMessage` and `ParseFeature` to route and extract values from the mixed output stream.
 
 Typical workflow pattern:
 
 ```
 Timer ──► CreateReadMessage("ExposureTime") ──────────────┐
-                                                           ├──► GenICamDevice ──► FilterMessage(ExposureTime, ReadResponse) ──► ParseFloatMessage
+                                                           ├──► GenICamDevice ──► ParseFeature("ExposureTime", Float) ──► double
 Timer ──► Multiply(1000) ──► CreateWriteMessage("ExposureTime") ┘         │
-                                                                           └──► FilterMessage(Frame) ──► ParseFrameMessage ──► MemberSelector(Image)
+                                                                           └──► FilterMessage(MessageType=Frame) ──► MemberSelector(Frame) ──► GenICamFrame
 ```
 
 **Why single owner:** No static state, no `Acquire()`/blocking, no ref-counting, no concurrent NodeMap access. All camera traffic flows through one observable — loggable, replayable, and debuggable. Concurrent access to the NodeMap from multiple operators is impossible by construction.
@@ -172,12 +172,12 @@ public class FilterMessage : Combinator<GenICamMessage, GenICamMessage>
     public GenICamMessageType? MessageType { get; set; }
 }
 
-// Extract typed values from ReadResponse messages; non-matching messages are silently skipped
-public class ParseFloatMessage  : Combinator<GenICamMessage, double>       { }
-public class ParseIntMessage    : Combinator<GenICamMessage, long>         { }
-public class ParseBoolMessage   : Combinator<GenICamMessage, bool>         { }
-public class ParseStringMessage : Combinator<GenICamMessage, string>       { }
-public class ParseFrameMessage  : Combinator<GenICamMessage, GenICamFrame> { }
+// Extract a named feature value with a typed output edge; type is resolved at workflow compile time
+public class ParseFeature : SingleArgumentExpressionBuilder
+{
+    public string           FeatureName { get; set; }
+    public FeatureValueType FeatureType { get; set; }  // Float → double | Integer → long | Boolean → bool | String/Enumeration → string
+}
 
 // Unchanged utility operators
 public class EnumerateDevices  : Source<DeviceInfo[]>   { public string? ProducerPath { get; set; } }
