@@ -81,7 +81,10 @@ namespace Bonsai.GenICam.GenTL
                 _api.EventKill(ev);
         }
 
-        // Blocks until a buffer arrives (or timeout ms elapses). Returns null on timeout or abort.
+        // Blocks until a buffer arrives, returns null on timeout or abort.
+        // Normal teardown calls InterruptWait() → EventKill, which returns GC_ERR_ABORT immediately.
+        // The timeout is a fallback for producers that ignore EventKill — without it, a broken
+        // producer would park this thread indefinitely after the workflow stops.
         internal GenICamFrame? WaitForFrame(uint timeoutMs)
         {
             // S_EVENT_NEW_BUFFER = { BUFFER_HANDLE BufferHandle; void* pUserPointer; }

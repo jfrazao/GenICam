@@ -53,8 +53,17 @@ namespace Bonsai.GenICam
         [Description("Number of acquisition buffers to allocate.")]
         public int NumBuffers { get; set; } = 4;
 
-        /// <summary>Gets or sets the timeout in milliseconds to wait for each frame.</summary>
-        [Description("Timeout in milliseconds to wait for each frame.")]
+        /// <summary>
+        /// Gets or sets the timeout in milliseconds passed to <c>EventGetData</c> on each iteration
+        /// of the acquisition loop. Normal teardown is driven by <c>EventKill</c>, which unblocks
+        /// <c>EventGetData</c> immediately with <c>GC_ERR_ABORT</c> — this timeout is never reached
+        /// under normal conditions. It exists as a fallback for GenTL producers that do not implement
+        /// <c>EventKill</c> correctly: without it, a broken producer would cause the acquisition thread
+        /// to block indefinitely on teardown. Set to roughly 2–3× your expected frame period.
+        /// </summary>
+        [Description("Timeout in milliseconds for each EventGetData call in the acquisition loop. " +
+                     "Normal teardown uses EventKill and does not rely on this value; " +
+                     "it is a safety net for producers that do not implement EventKill correctly.")]
         public uint FrameTimeoutMs { get; set; } = 5000;
 
         /// <summary>Gets or sets the camera feature values to apply before acquisition starts.</summary>
