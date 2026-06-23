@@ -17,6 +17,7 @@ namespace Bonsai.GenICam.GenApi
         private readonly Dictionary<string, NodeBase> _nodes = new Dictionary<string, NodeBase>(StringComparer.Ordinal);
         private readonly Dictionary<string, List<string>> _categories = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _categoryDescriptions = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly Dictionary<ulong, string> _chunkIdToName = new Dictionary<ulong, string>();
 
         internal NodeMap(GenTLApi api, IntPtr port)
         {
@@ -60,6 +61,13 @@ namespace Bonsai.GenICam.GenApi
                     node.PIsImplemented = ((string)el.Element(ns + "pIsImplemented"))?.Trim();
                     node.PIsAvailable   = ((string)el.Element(ns + "pIsAvailable"))?.Trim();
                     _nodes[name] = node;
+
+                    string? chunkIdStr = (string)el.Element(ns + "ChunkID");
+                    if (chunkIdStr != null)
+                    {
+                        ulong chunkId = ParseULong(el, ns, "ChunkID", 0);
+                        if (chunkId != 0) _chunkIdToName[chunkId] = name;
+                    }
                 }
             }
         }
@@ -597,6 +605,77 @@ namespace Bonsai.GenICam.GenApi
                 try { value = ReadNode(kv.Value); }
                 catch { continue; } // skip unreadable / WO / computed nodes
                 yield return new FeatureValue(kv.Key, value);
+            }
+        }
+
+        // Maps chunk ID values (from <ChunkID> XML elements) to feature names.
+        internal IReadOnlyDictionary<ulong, string> ChunkIdToName => _chunkIdToName;
+
+        // Parses chunk bytes for a named feature using the NodeMap's node graph, applying
+        // the same Converter/IntConverter formula chain as a normal register read.
+        // Returns null if the feature is not found or parsing fails.
+        internal object? TryReadChunk(string featureName, byte[] bytes)
+        {
+            if (!_nodes.TryGetValue(featureName, out var node)) return null;
+            try { return ReadNodeFromChunk(node, bytes); }
+            catch { return null; }
+        }
+
+        private object ReadNodeFromChunk(NodeBase node, byte[] bytes)
+        {
+            switch (node)
+            {
+                case MaskedIntRegNode r:
+                {
+                    ulong raw = ToUInt64(bytes, Math.Min(r.Length, bytes.Length), r.LittleEndian);
+                    long fullVal = r.Unsigned ? (long)raw : SignExtend(raw, r.Length);
+                    return (long)(((ulong)fullVal & r.Mask) >> r.Shift);
+                }
+                case IntRegNode r:
+                {
+                    ulong raw = ToUInt64(bytes, Math.Min(r.Length, bytes.Length), r.LittleEndian);
+                    return r.Unsigned ? (long)raw : SignExtend(raw, r.Length);
+                }
+                case FloatRegNode r:
+                {
+                    byte[] buf = r.LittleEndian ? bytes : Reverse(bytes);
+                    return r.Length == 4
+                        ? (object)(double)BitConverter.ToSingle(buf, 0)
+                        : BitConverter.ToDouble(buf, 0);
+                }
+                case StringRegNode r:
+                {
+                    int len = Array.IndexOf(bytes, (byte)0);
+                    return Encoding.ASCII.GetString(bytes, 0, len < 0 ? Math.Min(bytes.Length, r.Length) : len);
+                }
+                case IntegerNode n:
+                    if (n.ConstantValue.HasValue) return n.ConstantValue.Value;
+                    return ReadNodeFromChunk(ResolveRef(n.PValue), bytes);
+                case FloatNode n:
+                    return ReadNodeFromChunk(ResolveRef(n.PValue), bytes);
+                case BooleanNode n:
+                    return Convert.ToInt64(ReadNodeFromChunk(ResolveRef(n.PValue), bytes)) != 0;
+                case EnumerationNode n:
+                {
+                    long val = Convert.ToInt64(ReadNodeFromChunk(ResolveRef(n.PValue), bytes));
+                    return n.SymbolicByValue.TryGetValue(val, out string sym) ? (object)sym : val;
+                }
+                case ConverterNode n:
+                {
+                    double from = Convert.ToDouble(ReadNodeFromChunk(ResolveRef(n.PValue), bytes));
+                    var vars = ResolveConverterVars(n.Variables);
+                    vars["FROM"] = from;
+                    return EvaluateFormula(n.FormulaTo, vars);
+                }
+                case IntConverterNode n:
+                {
+                    double from = Convert.ToDouble(ReadNodeFromChunk(ResolveRef(n.PValue), bytes));
+                    var vars = ResolveConverterVars(n.Variables);
+                    vars["FROM"] = from;
+                    return (long)EvaluateFormula(n.FormulaTo, vars);
+                }
+                default:
+                    throw new NotSupportedException($"ReadChunk: unsupported node type {node.GetType().Name}");
             }
         }
 

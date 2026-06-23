@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using OpenCV.Net;
 
 namespace Bonsai.GenICam
@@ -52,13 +53,25 @@ namespace Bonsai.GenICam
         /// <summary>Gets the number of channels per pixel.</summary>
         public int Channels => Image.Channels;
 
-        internal GenICamFrame(IplImage image, ulong timestamp, ulong timestampNs, ulong frameId, bool isIncomplete)
+        /// <summary>
+        /// Gets per-frame metadata embedded in the buffer as GenICam chunk data, or <c>null</c>
+        /// when <see cref="GenICamDevice.ChunkModeActive"/> is false or the producer does not
+        /// implement <c>DSGetBufferChunkData</c> (GenTL 1.5+). Feature names match the GenICam
+        /// node names in the device XML (e.g. <c>"ChunkExposureTime"</c>, <c>"ChunkFrameID"</c>).
+        /// Values are typed: <c>long</c> for integer nodes, <c>double</c> for float nodes,
+        /// <c>bool</c> for boolean nodes, <c>string</c> for enumeration and string nodes.
+        /// </summary>
+        public IReadOnlyDictionary<string, object>? ChunkData { get; }
+
+        internal GenICamFrame(IplImage image, ulong timestamp, ulong timestampNs, ulong frameId, bool isIncomplete,
+            IReadOnlyDictionary<string, object>? chunkData = null)
         {
             Image        = image;
             Timestamp    = timestamp;
             TimestampNs  = timestampNs;
             FrameId      = frameId;
             IsIncomplete = isIncomplete;
+            ChunkData    = chunkData;
         }
     }
 }

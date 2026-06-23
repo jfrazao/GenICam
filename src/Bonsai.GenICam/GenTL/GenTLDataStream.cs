@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Bonsai.GenICam;
 using OpenCV.Net;
 
@@ -14,6 +15,8 @@ namespace Bonsai.GenICam.GenTL
         private int _fallbackWidth;
         private int _fallbackHeight;
         private ulong _fallbackPixelFmt;
+        private IReadOnlyDictionary<ulong, string>? _chunkIdToName;
+        private Func<string, byte[], object?>? _parseChunk;
 
         internal GenTLDataStream(GenTLApi api, IntPtr handle)
         {
@@ -26,6 +29,14 @@ namespace Bonsai.GenICam.GenTL
             _fallbackWidth = width;
             _fallbackHeight = height;
             _fallbackPixelFmt = pixelFmt;
+        }
+
+        internal void EnableChunkMode(
+            IReadOnlyDictionary<ulong, string> chunkIdToName,
+            Func<string, byte[], object?> parseChunk)
+        {
+            _chunkIdToName = chunkIdToName;
+            _parseChunk = parseChunk;
         }
 
         internal void Start(int numBuffers)
@@ -144,7 +155,46 @@ namespace Bonsai.GenICam.GenTL
                     expectedBytes,
                     expectedBytes);
             }
-            return new GenICamFrame(image, timestamp, timestampNs, frameId, isIncomplete);
+            var chunkData = ExtractChunkData(hBuffer, basePtr);
+            return new GenICamFrame(image, timestamp, timestampNs, frameId, isIncomplete, chunkData);
+        }
+
+        private IReadOnlyDictionary<string, object>? ExtractChunkData(IntPtr hBuffer, IntPtr basePtr)
+        {
+            if (_api.DSGetBufferChunkData == null || _chunkIdToName == null || _parseChunk == null)
+                return null;
+
+            UIntPtr numChunks = UIntPtr.Zero;
+            if (_api.DSGetBufferChunkData(_handle, hBuffer, IntPtr.Zero, ref numChunks) != 0) return null;
+            int count = (int)(ulong)numChunks;
+            if (count <= 0) return null;
+
+            int structSize = Marshal.SizeOf<SingleChunkData>();
+            IntPtr chunkBuf = Marshal.AllocHGlobal(count * structSize);
+            try
+            {
+                UIntPtr countRef = new UIntPtr((uint)count);
+                if (_api.DSGetBufferChunkData(_handle, hBuffer, chunkBuf, ref countRef) != 0) return null;
+
+                var result = new Dictionary<string, object>(count, StringComparer.Ordinal);
+                for (int i = 0; i < count; i++)
+                {
+                    var chunk = Marshal.PtrToStructure<SingleChunkData>(IntPtr.Add(chunkBuf, i * structSize));
+                    if (!_chunkIdToName.TryGetValue(chunk.ChunkID, out string name)) continue;
+                    int len = (int)(ulong)chunk.ChunkLength;
+                    if (len <= 0) continue;
+                    var bytes = new byte[len];
+                    IntPtr chunkPtr = new IntPtr(basePtr.ToInt64() + chunk.ChunkOffset.ToInt64());
+                    Marshal.Copy(chunkPtr, bytes, 0, len);
+                    object? value = _parseChunk(name, bytes);
+                    if (value != null) result[name] = value;
+                }
+                return result.Count > 0 ? result : null;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(chunkBuf);
+            }
         }
 
         private ulong TryGetBufferInfo(IntPtr hBuffer, BufferInfoCmd cmd, ulong fallback)
