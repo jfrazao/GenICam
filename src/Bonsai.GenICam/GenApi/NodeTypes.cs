@@ -27,6 +27,7 @@ namespace Bonsai.GenICam.GenApi
         public int Length { get; set; }            // bytes
         public bool Unsigned { get; set; } = true;
         public bool LittleEndian { get; set; } = true;
+        public string? PPort { get; set; }         // <pPort> — names a Port node whose ChunkID identifies the chunk
     }
 
     internal class FloatRegNode : NodeBase
@@ -35,6 +36,7 @@ namespace Bonsai.GenICam.GenApi
         public string[]? PAddresses { get; set; }
         public int Length { get; set; }            // 4 = float, 8 = double
         public bool LittleEndian { get; set; } = true;
+        public string? PPort { get; set; }
     }
 
     internal class StringRegNode : NodeBase
@@ -42,6 +44,7 @@ namespace Bonsai.GenICam.GenApi
         public ulong Address { get; set; }
         public string[]? PAddresses { get; set; }
         public int Length { get; set; }
+        public string? PPort { get; set; }
     }
 
     internal class MaskedIntRegNode : IntRegNode

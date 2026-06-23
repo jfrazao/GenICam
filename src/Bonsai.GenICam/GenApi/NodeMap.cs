@@ -18,6 +18,7 @@ namespace Bonsai.GenICam.GenApi
         private readonly Dictionary<string, List<string>> _categories = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _categoryDescriptions = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<ulong, string> _chunkIdToName = new Dictionary<ulong, string>();
+        private readonly Dictionary<string, ulong> _portToChunkId = new Dictionary<string, ulong>(StringComparer.Ordinal);
 
         internal NodeMap(GenTLApi api, IntPtr port)
         {
@@ -51,6 +52,16 @@ namespace Bonsai.GenICam.GenApi
                     continue;
                 }
 
+                // BFS/FLIR-style chunk layout: <ChunkID> lives on a <Port> node; terminal
+                // IntReg/FloatReg/StringReg reference it via <pPort>. Collect the mapping here
+                // so BuildChunkIdMap() can walk feature → pValue chain → pPort → chunk ID.
+                if (el.Name.LocalName == "Port")
+                {
+                    ulong portChunkId = ParseULong(el, ns, "ChunkID", 0);
+                    if (portChunkId != 0) _portToChunkId[name] = portChunkId;
+                    continue;
+                }
+
                 NodeBase? node = ParseElement(el, ns, name);
                 if (node != null)
                 {
@@ -61,15 +72,13 @@ namespace Bonsai.GenICam.GenApi
                     node.PIsImplemented = ((string)el.Element(ns + "pIsImplemented"))?.Trim();
                     node.PIsAvailable   = ((string)el.Element(ns + "pIsAvailable"))?.Trim();
                     _nodes[name] = node;
-
-                    string? chunkIdStr = (string)el.Element(ns + "ChunkID");
-                    if (chunkIdStr != null)
-                    {
-                        ulong chunkId = ParseULong(el, ns, "ChunkID", 0);
-                        if (chunkId != 0) _chunkIdToName[chunkId] = name;
-                    }
                 }
             }
+
+            // Port-based chunk layout (e.g. BFS-U3): walk feature → pValue/pVariable chains
+            // to find a terminal register with pPort referencing a chunk Port, then map chunk
+            // ID → logical feature name. Pass 2 overrides register-level names with logical names.
+            BuildChunkIdMap();
         }
 
         private static string[]? ParsePAddresses(XElement el, XNamespace ns)
@@ -95,7 +104,8 @@ namespace Bonsai.GenICam.GenApi
                         PAddresses = ParsePAddresses(el, ns),
                         Length = ParseInt(el, ns, "Length", 4),
                         Unsigned = !string.Equals((string)el.Element(ns + "Sign"), "Signed", StringComparison.OrdinalIgnoreCase),
-                        LittleEndian = !string.Equals((string)el.Element(ns + "Endianess"), "BigEndian", StringComparison.OrdinalIgnoreCase)
+                        LittleEndian = !string.Equals((string)el.Element(ns + "Endianess"), "BigEndian", StringComparison.OrdinalIgnoreCase),
+                        PPort = (string)el.Element(ns + "pPort")
                     };
 
                 case "MaskedIntReg":
@@ -125,7 +135,8 @@ namespace Bonsai.GenICam.GenApi
                         Mask = mask,
                         Shift = shift,
                         Unsigned = !string.Equals((string)el.Element(ns + "Sign"), "Signed", StringComparison.OrdinalIgnoreCase),
-                        LittleEndian = !string.Equals((string)el.Element(ns + "Endianess"), "BigEndian", StringComparison.OrdinalIgnoreCase)
+                        LittleEndian = !string.Equals((string)el.Element(ns + "Endianess"), "BigEndian", StringComparison.OrdinalIgnoreCase),
+                        PPort = (string)el.Element(ns + "pPort")
                     };
                 }
 
@@ -136,7 +147,8 @@ namespace Bonsai.GenICam.GenApi
                         AccessMode = accessMode,
                         Address = ParseAddress(el, ns),
                         PAddresses = ParsePAddresses(el, ns),
-                        Length = ParseInt(el, ns, "Length", 4)
+                        Length = ParseInt(el, ns, "Length", 4),
+                        PPort = (string)el.Element(ns + "pPort")
                     };
 
                 case "StringReg":
@@ -146,7 +158,8 @@ namespace Bonsai.GenICam.GenApi
                         AccessMode = accessMode,
                         Address = ParseAddress(el, ns),
                         PAddresses = ParsePAddresses(el, ns),
-                        Length = ParseInt(el, ns, "Length", 64)
+                        Length = ParseInt(el, ns, "Length", 64),
+                        PPort = (string)el.Element(ns + "pPort")
                     };
 
                 case "Integer":
@@ -660,6 +673,16 @@ namespace Bonsai.GenICam.GenApi
                     long val = Convert.ToInt64(ReadNodeFromChunk(ResolveRef(n.PValue), bytes));
                     return n.SymbolicByValue.TryGetValue(val, out string sym) ? (object)sym : val;
                 }
+                case SwissKnifeNode n:
+                {
+                    var vars = ResolveFormulaVarsFromChunk(n.Variables, bytes);
+                    return EvaluateFormula(n.Formula, vars);
+                }
+                case IntSwissKnifeNode n:
+                {
+                    var vars = ResolveFormulaVarsFromChunk(n.Variables, bytes);
+                    return (long)EvaluateFormula(n.Formula, vars);
+                }
                 case ConverterNode n:
                 {
                     double from = Convert.ToDouble(ReadNodeFromChunk(ResolveRef(n.PValue), bytes));
@@ -677,6 +700,89 @@ namespace Bonsai.GenICam.GenApi
                 default:
                     throw new NotSupportedException($"ReadChunk: unsupported node type {node.GetType().Name}");
             }
+        }
+
+        // ---- chunk ID map (Port-based layout) ----
+
+        // Two-pass build: pass 1 seeds any reachable node name; pass 2 overwrites with the
+        // logical feature name (Integer/Float/Enumeration/Boolean/String) when one exists,
+        // so callers get "ChunkExposureTime" rather than "ChunkExposureTime_Val".
+        private void BuildChunkIdMap()
+        {
+            foreach (var kv in _nodes)
+            {
+                ulong? id;
+                try { id = FindChunkId(kv.Value); }
+                catch { continue; }
+                if (id.HasValue) _chunkIdToName[id.Value] = kv.Key;
+            }
+            foreach (var kv in _nodes)
+            {
+                if (!(kv.Value is IntegerNode || kv.Value is FloatNode || kv.Value is EnumerationNode ||
+                      kv.Value is BooleanNode || kv.Value is StringNode)) continue;
+                ulong? id;
+                try { id = FindChunkId(kv.Value); }
+                catch { continue; }
+                if (id.HasValue) _chunkIdToName[id.Value] = kv.Key;
+            }
+        }
+
+        // Walks the node graph to find the Port whose <ChunkID> identifies this node's chunk.
+        // Follows pValue chains, then SwissKnife pVariable refs when no pValue chain leads there.
+        private ulong? FindChunkId(NodeBase node, int depth = 0)
+        {
+            if (depth > 20) return null;
+
+            string? pPort = GetNodePPort(node);
+            if (pPort != null && _portToChunkId.TryGetValue(pPort, out ulong chunkId))
+                return chunkId;
+
+            string? pv = NodePValue(node);
+            if (pv != null && _nodes.TryGetValue(pv, out var pValueNode))
+            {
+                ulong? id = FindChunkId(pValueNode, depth + 1);
+                if (id.HasValue) return id;
+            }
+
+            Dictionary<string, string>? vars = node is SwissKnifeNode sk ? sk.Variables :
+                                               node is IntSwissKnifeNode isk ? isk.Variables : null;
+            if (vars != null)
+            {
+                foreach (var varRef in vars.Values)
+                {
+                    if (_nodes.TryGetValue(varRef, out var varNode))
+                    {
+                        ulong? id = FindChunkId(varNode, depth + 1);
+                        if (id.HasValue) return id;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static string? GetNodePPort(NodeBase node) => node switch
+        {
+            IntRegNode r    => r.PPort,
+            FloatRegNode r  => r.PPort,
+            StringRegNode r => r.PPort,
+            _ => null
+        };
+
+        // Like ResolveFormulaVars but reads from chunk bytes first, falling back to the
+        // live register when a variable is not part of the chunk (e.g. a calibration constant).
+        private Dictionary<string, double> ResolveFormulaVarsFromChunk(Dictionary<string, string> variables, byte[] bytes)
+        {
+            var result = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var kv in variables)
+            {
+                if (!_nodes.TryGetValue(kv.Value, out var refNode)) continue;
+                double val;
+                try { val = Convert.ToDouble(ReadNodeFromChunk(refNode, bytes)); }
+                catch { try { val = Convert.ToDouble(ReadNode(refNode)); } catch { continue; } }
+                result[kv.Key] = val;
+            }
+            return result;
         }
 
         // ---- internals ----
