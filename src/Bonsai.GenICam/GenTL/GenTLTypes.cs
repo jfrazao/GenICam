@@ -1,3 +1,6 @@
+using System;
+using System.Runtime.InteropServices;
+
 namespace Bonsai.GenICam.GenTL
 {
     internal enum GCError : int
@@ -148,6 +151,15 @@ namespace Bonsai.GenICam.GenTL
         NumChunksMax = 11,
         BufAnnounceMin = 12,
         BufAlignment = 13
+    }
+
+    // GenTL 1.5 SINGLE_CHUNK_DATA: offset and length of one chunk data item in the buffer.
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SingleChunkData
+    {
+        internal ulong ChunkID;       // uint64_t
+        internal IntPtr ChunkOffset;  // ptrdiff_t — byte offset into the buffer base
+        internal UIntPtr ChunkLength; // size_t — byte length of the chunk value
     }
 
     internal enum PortInfoCmd : uint

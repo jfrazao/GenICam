@@ -76,6 +76,18 @@ namespace Bonsai.GenICam
         [Description("Run the frame acquisition loop and emit Frame messages. Set to false for feature-only access.")]
         public bool AcquireFrames { get; set; } = true;
 
+        /// <summary>
+        /// Gets or sets whether to enable GenICam chunk mode before starting acquisition.
+        /// When true, the camera embeds per-frame metadata in each buffer and
+        /// <see cref="GenICamFrame.ChunkData"/> is populated with the parsed values.
+        /// Requires producer support for <c>DSGetBufferChunkData</c> (GenTL 1.5+);
+        /// <c>ChunkData</c> will be <c>null</c> on every frame if not supported.
+        /// </summary>
+        [Description("Enable GenICam chunk mode — embeds per-frame metadata in each buffer. " +
+                     "Requires producer support for DSGetBufferChunkData (GenTL 1.5+). " +
+                     "ChunkData on each frame will be null if not supported.")]
+        public bool ChunkModeActive { get; set; } = false;
+
         /// <inheritdoc/>
         public override IObservable<GenICamMessage> Process(IObservable<GenICamMessage> source)
         {
@@ -116,10 +128,16 @@ namespace Bonsai.GenICam
                             Map = map,
                             NumBuffers = NumBuffers,
                             FrameTimeoutMs = FrameTimeoutMs,
+                            ChunkModeActive = ChunkModeActive,
                             Cancel = cancel,
                             Observer = syncObs
                         };
-                        acqThread = new Thread(obj => RunAcquisition((AcqState)obj!));
+                        acqThread = new Thread(obj =>
+                        {
+                            var s = (AcqState)obj!;
+                            RunAcquisition(s);
+                            s.CtxToClose?.Dispose();
+                        });
                         acqThread.IsBackground = true;
                         acqThread.Name = "GenICamDevice";
                         acqThread.Start(acqState);
@@ -131,21 +149,33 @@ namespace Bonsai.GenICam
                         acqState?.Stream?.InterruptWait();
                         featureSub.Dispose();
                         // Drain the scheduler before disposing it. ScheduledObserver.Run
-                        // reschedules itself recursively via Schedule(); if the scheduler is
-                        // already disposed when that call lands it throws ObjectDisposedException
-                        // on the scheduler thread — an unhandled exception that crashes the
-                        // process. The sentinel is queued after featureSub's cleanup, so when
-                        // it fires the queue is empty and disposing the scheduler is safe.
+                        // reschedules itself recursively via Schedule(). The race: if Run was
+                        // mid-execution when featureSub.Dispose() fired, it can schedule one
+                        // more Run AFTER the main-thread sentinel lands, so that Run executes
+                        // after the sentinel but before Dispose() — hitting a disposed scheduler.
+                        // Nesting two sentinels covers it: the inner fires only after that
+                        // final stray Run has itself completed, guaranteeing an empty queue.
                         using (var drained = new ManualResetEventSlim(false))
                         {
-                            scheduler.Schedule(() => drained.Set());
+                            scheduler.Schedule(() => scheduler.Schedule(() => drained.Set()));
                             drained.Wait(TimeSpan.FromSeconds(2));
                         }
                         scheduler.Dispose();
-                        acqThread?.Join(5000);
+                        if (acqThread != null && Thread.CurrentThread == acqThread)
+                        {
+                            // Disposal is running on the acquisition thread (e.g. Take(N)
+                            // triggered upstream dispose from within OnNext). Cannot Join
+                            // ourselves — hand ctx to the thread; it closes after RunAcquisition's
+                            // finally block finishes.
+                            acqState!.CtxToClose = ctx;
+                        }
+                        else
+                        {
+                            acqThread?.Join(5000);
+                            ctx.Dispose();
+                        }
                         cancel.Dispose();
                         _liveNodeMap = null;
-                        ctx.Dispose();
                     });
                 }
                 catch
@@ -190,6 +220,11 @@ namespace Bonsai.GenICam
                     TryReadInt(s.Map, "Width"),
                     TryReadInt(s.Map, "Height"),
                     TryReadPixelFmt(s.Map));
+                if (s.ChunkModeActive)
+                {
+                    try { s.Map.Write("ChunkModeActive", "true"); } catch { }
+                    stream.EnableChunkMode(s.Map.ChunkIdToName, (name, bytes) => s.Map.TryReadChunk(name, bytes));
+                }
                 step = "start acquisition";
                 stream.Start(s.NumBuffers);
                 s.Stream = stream;
@@ -287,9 +322,11 @@ namespace Bonsai.GenICam
             internal NodeMap Map = null!;
             internal int NumBuffers;
             internal uint FrameTimeoutMs;
+            internal bool ChunkModeActive;
             internal CancellationTokenSource Cancel = null!;
             internal IObserver<GenICamMessage> Observer = null!;
             internal volatile GenTLDataStream? Stream;
+            internal volatile GenICamDeviceContext? CtxToClose;
         }
     }
 

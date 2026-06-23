@@ -129,6 +129,10 @@ namespace Bonsai.GenICam.GenTL
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         public delegate int DSGetInfoDelegate(IntPtr hDataStream, uint iInfoCmd, out uint piType, byte[] pBuffer, ref UIntPtr piSize);
 
+        // Optional: added in GenTL 1.5
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate int DSGetBufferChunkDataDelegate(IntPtr hDataStream, IntPtr hBuffer, IntPtr pChunkDataList, ref UIntPtr piNumChunks);
+
         // ---- bound instances ----
 
         public GCInitLibDelegate GCInitLib;
@@ -169,6 +173,7 @@ namespace Bonsai.GenICam.GenTL
         public DSRevokeBufferDelegate DSRevokeBuffer;
         public DSGetBufferInfoDelegate DSGetBufferInfo;
         public DSGetInfoDelegate DSGetInfo;
+        public DSGetBufferChunkDataDelegate? DSGetBufferChunkData; // null if producer predates GenTL 1.5
 
         // Module-level cache: each .cti is loaded and GCInitLib'd exactly once per process.
         // Many GenTL producers (HikRobot MVS in particular) crash or malfunction if
@@ -236,6 +241,7 @@ namespace Bonsai.GenICam.GenTL
             DSRevokeBuffer = Bind<DSRevokeBufferDelegate>("DSRevokeBuffer");
             DSGetBufferInfo = Bind<DSGetBufferInfoDelegate>("DSGetBufferInfo");
             DSGetInfo = Bind<DSGetInfoDelegate>("DSGetInfo");
+            DSGetBufferChunkData = BindOptional<DSGetBufferChunkDataDelegate>("DSGetBufferChunkData");
 
             if (_initialized)
                 GenTLException.Check(GCInitLib());
