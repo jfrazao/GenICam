@@ -228,8 +228,9 @@ namespace Bonsai.GenICam
             };
 
             overlayTrackBar = new TrackBar { Minimum = 0, Maximum = 1000, TickStyle = TickStyle.None, Height = 22, Visible = false };
-            overlayTrackBar.Scroll += OverlayTrackBar_Scroll;
-            overlayTrackBar.Leave  += OverlayNumericPanel_Leave;
+            overlayTrackBar.Scroll  += OverlayTrackBar_Scroll;
+            overlayTrackBar.MouseUp += (s, e) => CommitNumericValue();
+            overlayTrackBar.Leave   += OverlayNumericPanel_Leave;
             overlayTrackBar.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Escape)
@@ -748,13 +749,17 @@ namespace Bonsai.GenICam
 
         private void OverlayNumeric_ValueChanged(object sender, EventArgs e)
         {
-            if (_suppressSync || _overlayEntry == null || !overlayTrackBar.Visible) return;
-            if (!_overlayEntry.MinValue.HasValue || !_overlayEntry.MaxValue.HasValue) return;
-            if (_overlayEntry.MaxValue.Value <= _overlayEntry.MinValue.Value) return;
-            int tick = ComputeTick(_overlayEntry, (double)overlayNumeric.Value);
-            _suppressSync = true;
-            overlayTrackBar.Value = Math.Max(0, Math.Min(1000, tick));
-            _suppressSync = false;
+            if (_suppressSync || _overlayEntry == null) return;
+            if (overlayTrackBar.Visible
+                && _overlayEntry.MinValue.HasValue && _overlayEntry.MaxValue.HasValue
+                && _overlayEntry.MaxValue.Value > _overlayEntry.MinValue.Value)
+            {
+                int tick = ComputeTick(_overlayEntry, (double)overlayNumeric.Value);
+                _suppressSync = true;
+                overlayTrackBar.Value = Math.Max(0, Math.Min(1000, tick));
+                _suppressSync = false;
+            }
+            CommitNumericValue();
         }
 
         private void OverlayTrackBar_Scroll(object sender, EventArgs e)
