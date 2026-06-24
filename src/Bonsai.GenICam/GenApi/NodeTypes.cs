@@ -17,6 +17,7 @@ namespace Bonsai.GenICam.GenApi
         public NodeVisibility Visibility { get; set; } = NodeVisibility.Beginner;
         public string? PIsImplemented { get; set; }
         public string? PIsAvailable { get; set; }
+        public string? PIsLocked { get; set; }
     }
 
     // Direct register nodes (hold the actual address + length)
@@ -44,6 +45,7 @@ namespace Bonsai.GenICam.GenApi
         public ulong Address { get; set; }
         public string[]? PAddresses { get; set; }
         public int Length { get; set; }
+        public string? PLength { get; set; }       // <pLength> — dynamic length from another node
         public string? PPort { get; set; }
     }
 
@@ -75,8 +77,10 @@ namespace Bonsai.GenICam.GenApi
         public string? PValue { get; set; }
         public double? LiteralMin { get; set; }
         public double? LiteralMax { get; set; }
+        public double? LiteralInc { get; set; }
         public string? PMin { get; set; }
         public string? PMax { get; set; }
+        public string? PInc { get; set; }
         public string? Unit { get; set; }
         public NodeRepresentation Representation { get; set; } = NodeRepresentation.Linear;
         public NodeDisplayNotation DisplayNotation { get; set; } = NodeDisplayNotation.Automatic;
@@ -104,6 +108,9 @@ namespace Bonsai.GenICam.GenApi
         public string? PValue { get; set; }
         public Dictionary<string, long> Entries { get; set; } = new Dictionary<string, long>();
         public Dictionary<long, string> SymbolicByValue { get; set; } = new Dictionary<long, string>();
+        // Per-entry pIsImplemented / pIsAvailable guards; only entries with guards are stored.
+        public Dictionary<string, (string? PIsImplemented, string? PIsAvailable)> EntryGuards { get; set; }
+            = new Dictionary<string, (string?, string?)>(StringComparer.Ordinal);
     }
 
     // Formula-based computed node — evaluates an expression over named pVariable references.
