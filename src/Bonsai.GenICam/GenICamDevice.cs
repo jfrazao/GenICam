@@ -88,6 +88,14 @@ namespace Bonsai.GenICam
                      "ChunkData on each frame will be null if not supported.")]
         public bool ChunkModeActive { get; set; } = false;
 
+        // Test-only seam (internal, off by default, not a workflow property): when set together
+        // with ChunkModeActive, enables every chunk selector the camera exposes on the acquisition
+        // connection before AcquisitionStart, so the buffer carries the full metadata set rather
+        // than only what a UserSet happens to have enabled. Kept internal because auto-enabling all
+        // chunks is opinionated and not universally supported — real workflows configure chunks via
+        // a UserSet instead. Used by the unit-test harness to validate chunk decoding end-to-end.
+        internal bool EnableAllChunks { get; set; } = false;
+
         /// <inheritdoc/>
         public override IObservable<GenICamMessage> Process(IObservable<GenICamMessage> source)
         {
@@ -129,6 +137,7 @@ namespace Bonsai.GenICam
                             NumBuffers = NumBuffers,
                             FrameTimeoutMs = FrameTimeoutMs,
                             ChunkModeActive = ChunkModeActive,
+                            EnableAllChunks = EnableAllChunks,
                             Cancel = cancel,
                             Observer = syncObs
                         };
@@ -223,6 +232,7 @@ namespace Bonsai.GenICam
                 if (s.ChunkModeActive)
                 {
                     try { s.Map.Write("ChunkModeActive", "true"); } catch { }
+                    if (s.EnableAllChunks) EnableChunkSelectors(s.Map);
                     stream.EnableChunkMode(s.Map.ChunkIdToName, (name, bytes) => s.Map.TryReadChunk(name, bytes));
                 }
                 step = "start acquisition";
@@ -254,6 +264,25 @@ namespace Bonsai.GenICam
         private static void TryExecuteCommand(NodeMap map, string name)
         {
             try { map.Write(name, ""); } catch { }
+        }
+
+        // Enables every chunk selector the camera exposes so their metadata is embedded in each
+        // buffer. Must run on the acquisition connection before AcquisitionStart — many producers
+        // only honor ChunkEnable for the connection that starts streaming, so without this the
+        // buffer carries only the implicit image chunk. Uses the unfiltered entry list because some
+        // producers report a selector as "unavailable" via its guards yet still accept the write;
+        // selectors the device genuinely rejects are skipped.
+        private static void EnableChunkSelectors(NodeMap map)
+        {
+            foreach (var sel in map.GetAllEnumEntries("ChunkSelector"))
+            {
+                try
+                {
+                    map.Write("ChunkSelector", sel);
+                    map.Write("ChunkEnable", "true");
+                }
+                catch { /* selector not supported or not writable on this device */ }
+            }
         }
 
         private static int TryReadInt(NodeMap map, string name)
@@ -323,6 +352,7 @@ namespace Bonsai.GenICam
             internal int NumBuffers;
             internal uint FrameTimeoutMs;
             internal bool ChunkModeActive;
+            internal bool EnableAllChunks;
             internal CancellationTokenSource Cancel = null!;
             internal IObserver<GenICamMessage> Observer = null!;
             internal volatile GenTLDataStream? Stream;

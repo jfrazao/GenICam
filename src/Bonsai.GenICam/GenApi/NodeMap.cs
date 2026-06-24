@@ -581,6 +581,17 @@ namespace Bonsai.GenICam.GenApi
             return new string[0];
         }
 
+        // All declared enum entry names, ignoring pIsAvailable/pIsImplemented guards.
+        // GetEnumEntries filters by those guards (for UI), but some producers report a chunk
+        // selector entry as "unavailable" while still accepting a write to it — callers that
+        // want to attempt every entry and handle rejection themselves use this.
+        internal IReadOnlyList<string> GetAllEnumEntries(string name)
+        {
+            if (_nodes.TryGetValue(name, out var node) && node is EnumerationNode en)
+                return new List<string>(en.Entries.Keys);
+            return new string[0];
+        }
+
         private bool IsEnumEntryAvailable(EnumerationNode en, string entryName)
         {
             if (!en.EntryGuards.TryGetValue(entryName, out var guards)) return true;
