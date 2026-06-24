@@ -62,6 +62,55 @@ namespace Bonsai.GenICam.GenApi
                     continue;
                 }
 
+                // StructReg: unroll each StructEntry into a MaskedIntRegNode so existing
+                // read/write code handles them without a dedicated node type.
+                if (el.Name.LocalName == "StructReg")
+                {
+                    ulong structAddr = ParseAddress(el, ns);
+                    string[]? structPAddrs = ParsePAddresses(el, ns);
+                    int structLen = ParseInt(el, ns, "Length", 4);
+                    bool structLE = !string.Equals((string)el.Element(ns + "Endianess"), "BigEndian", StringComparison.OrdinalIgnoreCase);
+                    string? structPPort = (string)el.Element(ns + "pPort");
+                    foreach (var entry in el.Elements(ns + "StructEntry"))
+                    {
+                        string entryName = (string)entry.Attribute("Name");
+                        if (string.IsNullOrEmpty(entryName)) continue;
+                        var entryAm = ParseAccessMode((string)entry.Element(ns + "AccessMode") ?? (string)entry.Attribute("AccessMode") ?? "RW");
+                        bool entryUnsigned = !string.Equals((string)entry.Element(ns + "Sign"), "Signed", StringComparison.OrdinalIgnoreCase);
+                        string? bitStr = (string)entry.Element(ns + "Bit");
+                        ulong entryMask; int entryShift;
+                        if (bitStr != null)
+                        {
+                            string bt = bitStr.Trim();
+                            int bit = bt.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                                ? (int)Convert.ToUInt32(bt, 16) : int.Parse(bt);
+                            entryMask = 1UL << bit; entryShift = bit;
+                        }
+                        else
+                        {
+                            entryMask = ParseULong(entry, ns, "Mask", ulong.MaxValue);
+                            entryShift = ParseInt(entry, ns, "Shift", 0);
+                        }
+                        var entryNode = new MaskedIntRegNode
+                        {
+                            Name = entryName, AccessMode = entryAm,
+                            Address = structAddr, PAddresses = structPAddrs,
+                            Length = structLen, LittleEndian = structLE,
+                            Unsigned = entryUnsigned, Mask = entryMask, Shift = entryShift,
+                            PPort = structPPort
+                        };
+                        entryNode.Description    = ((string)entry.Element(ns + "Description"))?.Trim();
+                        entryNode.ToolTip        = ((string)entry.Element(ns + "ToolTip"))?.Trim();
+                        if (entryNode.Description == null) entryNode.Description = entryNode.ToolTip;
+                        entryNode.Visibility     = ParseVisibility((string)entry.Element(ns + "Visibility"));
+                        entryNode.PIsImplemented = ((string)entry.Element(ns + "pIsImplemented"))?.Trim();
+                        entryNode.PIsAvailable   = ((string)entry.Element(ns + "pIsAvailable"))?.Trim();
+                        entryNode.PIsLocked      = ((string)entry.Element(ns + "pIsLocked"))?.Trim();
+                        _nodes[entryName] = entryNode;
+                    }
+                    continue;
+                }
+
                 NodeBase? node = ParseElement(el, ns, name);
                 if (node != null)
                 {
@@ -71,6 +120,7 @@ namespace Bonsai.GenICam.GenApi
                     node.Visibility     = ParseVisibility((string)el.Element(ns + "Visibility"));
                     node.PIsImplemented = ((string)el.Element(ns + "pIsImplemented"))?.Trim();
                     node.PIsAvailable   = ((string)el.Element(ns + "pIsAvailable"))?.Trim();
+                    node.PIsLocked      = ((string)el.Element(ns + "pIsLocked"))?.Trim();
                     _nodes[name] = node;
                 }
             }
@@ -159,6 +209,7 @@ namespace Bonsai.GenICam.GenApi
                         Address = ParseAddress(el, ns),
                         PAddresses = ParsePAddresses(el, ns),
                         Length = ParseInt(el, ns, "Length", 64),
+                        PLength = (string)el.Element(ns + "pLength"),
                         PPort = (string)el.Element(ns + "pPort")
                     };
 
@@ -189,6 +240,7 @@ namespace Bonsai.GenICam.GenApi
                 case "Float":
                 {
                     string minS = (string)el.Element(ns + "Min"), maxS = (string)el.Element(ns + "Max");
+                    string incS = (string)el.Element(ns + "Inc");
                     string dpS = (string)el.Element(ns + "DisplayPrecision");
                     return new FloatNode
                     {
@@ -196,8 +248,10 @@ namespace Bonsai.GenICam.GenApi
                         PValue = (string)el.Element(ns + "pValue"),
                         LiteralMin = minS != null ? (double?)double.Parse(minS.Trim(), System.Globalization.CultureInfo.InvariantCulture) : null,
                         LiteralMax = maxS != null ? (double?)double.Parse(maxS.Trim(), System.Globalization.CultureInfo.InvariantCulture) : null,
+                        LiteralInc = incS != null ? (double?)double.Parse(incS.Trim(), System.Globalization.CultureInfo.InvariantCulture) : null,
                         PMin = (string)el.Element(ns + "pMin"),
                         PMax = (string)el.Element(ns + "pMax"),
+                        PInc = (string)el.Element(ns + "pInc"),
                         Unit = ((string)el.Element(ns + "Unit"))?.Trim(),
                         Representation = ParseRepresentation((string)el.Element(ns + "Representation")),
                         DisplayNotation = ParseDisplayNotation((string)el.Element(ns + "DisplayNotation")),
@@ -234,6 +288,7 @@ namespace Bonsai.GenICam.GenApi
                 {
                     var entries = new Dictionary<string, long>(StringComparer.Ordinal);
                     var byValue = new Dictionary<long, string>();
+                    var entryGuards = new Dictionary<string, (string?, string?)>(StringComparer.Ordinal);
                     foreach (var entry in el.Elements(ns + "EnumEntry"))
                     {
                         string entryName = (string)entry.Attribute("Name");
@@ -242,6 +297,10 @@ namespace Bonsai.GenICam.GenApi
                         {
                             entries[entryName] = value;
                             byValue[value] = entryName;
+                            string? pImpl  = ((string)entry.Element(ns + "pIsImplemented"))?.Trim();
+                            string? pAvail = ((string)entry.Element(ns + "pIsAvailable"))?.Trim();
+                            if (pImpl != null || pAvail != null)
+                                entryGuards[entryName] = (pImpl, pAvail);
                         }
                     }
                     return new EnumerationNode
@@ -250,7 +309,8 @@ namespace Bonsai.GenICam.GenApi
                         AccessMode = accessMode,
                         PValue = (string)el.Element(ns + "pValue"),
                         Entries = entries,
-                        SymbolicByValue = byValue
+                        SymbolicByValue = byValue,
+                        EntryGuards = entryGuards
                     };
                 }
 
@@ -328,6 +388,8 @@ namespace Bonsai.GenICam.GenApi
         internal FeatureValue Read(string name)
         {
             var node = Resolve(name);
+            if (node.AccessMode == NodeAccessMode.NI)
+                throw new InvalidOperationException($"Feature '{name}' is not implemented on this device.");
             return new FeatureValue(name, ReadNode(node));
         }
 
@@ -365,8 +427,11 @@ namespace Bonsai.GenICam.GenApi
         // when its backing register declares RO — e.g. DeviceTemperature.
         private bool EffectiveWritable(NodeBase node)
         {
-            if (node.AccessMode == NodeAccessMode.RO || node.AccessMode == NodeAccessMode.NA)
+            if (node.AccessMode == NodeAccessMode.RO || node.AccessMode == NodeAccessMode.NA || node.AccessMode == NodeAccessMode.NI)
                 return false;
+            if (node.PIsLocked != null)
+                try { if (Convert.ToInt64(ReadNode(Resolve(node.PIsLocked))) != 0) return false; }
+                catch { }
             // Terminal register nodes: their AccessMode is authoritative
             if (node is IntRegNode || node is FloatRegNode || node is StringRegNode || node is MaskedIntRegNode)
                 return node.AccessMode == NodeAccessMode.RW || node.AccessMode == NodeAccessMode.WO;
@@ -498,10 +563,23 @@ namespace Bonsai.GenICam.GenApi
             if (_nodes.TryGetValue(name, out var node) && node is EnumerationNode en)
             {
                 var list = new List<string>(en.Entries.Count);
-                foreach (string key in en.Entries.Keys) list.Add(key);
+                foreach (string key in en.Entries.Keys)
+                    if (IsEnumEntryAvailable(en, key)) list.Add(key);
                 return list;
             }
             return new string[0];
+        }
+
+        private bool IsEnumEntryAvailable(EnumerationNode en, string entryName)
+        {
+            if (!en.EntryGuards.TryGetValue(entryName, out var guards)) return true;
+            if (guards.PIsImplemented != null)
+                try { if (Convert.ToInt64(ReadNode(Resolve(guards.PIsImplemented))) == 0) return false; }
+                catch { return false; }
+            if (guards.PIsAvailable != null)
+                try { if (Convert.ToInt64(ReadNode(Resolve(guards.PIsAvailable))) == 0) return false; }
+                catch { return false; }
+            return true;
         }
 
         internal IEnumerable<string> GetCommandNodeNames()
@@ -529,7 +607,7 @@ namespace Bonsai.GenICam.GenApi
             }
             if (node is FloatNode f)
             {
-                // Read pMin/pMax directly if declared on the Float node — they are already in user units.
+                // Read pMin/pMax/pInc directly if declared on the Float node — they are already in user units.
                 //
                 // FLIR (Blackfly S): Float.pMin/pMax → SwissKnife (Formula: RAW, trivial passthrough) → IntReg.
                 //   The backing Converter is also trivial (FormulaTo: FROM). Limits arrive here in µs.
@@ -539,8 +617,9 @@ namespace Bonsai.GenICam.GenApi
                 //   Even when the Converter's FormulaTo/FormulaFrom are inverted on some IDS firmware
                 //   versions (requiring the swap detected in ReadNode/WriteNode), the SwissKnife still
                 //   produces correct µs limits — so limits are always right here regardless.
-                double? min = f.LiteralMin.HasValue ? (double?)f.LiteralMin.Value : (f.PMin != null ? TryReadRef(f.PMin) : null);
-                double? max = f.LiteralMax.HasValue ? (double?)f.LiteralMax.Value : (f.PMax != null ? TryReadRef(f.PMax) : null);
+                double? min  = f.LiteralMin.HasValue ? (double?)f.LiteralMin.Value : (f.PMin != null ? TryReadRef(f.PMin) : null);
+                double? max  = f.LiteralMax.HasValue ? (double?)f.LiteralMax.Value : (f.PMax != null ? TryReadRef(f.PMax) : null);
+                double? step = f.LiteralInc.HasValue ? (double?)f.LiteralInc.Value : (f.PInc != null ? TryReadRef(f.PInc) : null);
                 if (f.PValue != null)
                 {
                     try
@@ -591,12 +670,12 @@ namespace Bonsai.GenICam.GenApi
                             var (bMin, bMax, bStep) = EffectiveLimits(next);
                             if (!min.HasValue) min = bMin;
                             if (!max.HasValue) max = bMax;
-                            return (min, max, bStep);
+                            return (min, max, step ?? bStep);
                         }
                     }
                     catch { }
                 }
-                return (min, max, null);
+                return (min, max, step);
             }
             // Converter nodes change unit space — limits below them are meaningless in user units.
             if (node is ConverterNode || node is IntConverterNode) return (null, null, null);
@@ -1050,7 +1129,8 @@ namespace Bonsai.GenICam.GenApi
         private string ReadStringReg(StringRegNode r)
         {
             ulong address = ResolveAddressString(r);
-            var buf = ReadPort(address, r.Length);
+            int length = r.PLength != null ? (int)Convert.ToInt64(ReadNode(Resolve(r.PLength))) : r.Length;
+            var buf = ReadPort(address, length);
             int len = Array.IndexOf(buf, (byte)0);
             return Encoding.ASCII.GetString(buf, 0, len < 0 ? buf.Length : len);
         }
@@ -1082,9 +1162,10 @@ namespace Bonsai.GenICam.GenApi
         private void WriteStringReg(StringRegNode r, string value)
         {
             ulong address = ResolveAddressString(r);
-            var bytes = new byte[r.Length];
+            int length = r.PLength != null ? (int)Convert.ToInt64(ReadNode(Resolve(r.PLength))) : r.Length;
+            var bytes = new byte[length];
             var encoded = Encoding.ASCII.GetBytes(value);
-            int copy = Math.Min(encoded.Length, r.Length - 1);
+            int copy = Math.Min(encoded.Length, length - 1);
             Array.Copy(encoded, bytes, copy);
             WritePort(address, bytes);
         }
@@ -1118,17 +1199,13 @@ namespace Bonsai.GenICam.GenApi
         {
             string val = (string)el.Element(ns + "Address");
             if (val == null) return 0;
-            return val.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                ? Convert.ToUInt64(val, 16)
-                : ulong.Parse(val);
+            return ParseHexOrDec64(val.Trim());
         }
 
         private static long ParseLongLiteral(string s)
         {
             s = s.Trim();
-            return s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                ? (long)Convert.ToUInt64(s, 16)
-                : long.Parse(s);
+            return (long)ParseHexOrDec64(s);
         }
 
         private static int ParseInt(XElement el, XNamespace ns, string localName, int defaultValue)
@@ -1145,20 +1222,25 @@ namespace Bonsai.GenICam.GenApi
         {
             string val = (string)el.Element(ns + localName);
             if (val == null) return defaultValue;
-            val = val.Trim();
-            return val.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                ? (long)Convert.ToUInt64(val, 16)
-                : long.Parse(val);
+            return (long)ParseHexOrDec64(val.Trim());
         }
 
         private static ulong ParseULong(XElement el, XNamespace ns, string localName, ulong defaultValue)
         {
             string val = (string)el.Element(ns + localName);
             if (val == null) return defaultValue;
-            val = val.Trim();
-            return val.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                ? Convert.ToUInt64(val, 16)
-                : ulong.Parse(val);
+            return ParseHexOrDec64(val.Trim());
+        }
+
+        // Parses a numeric string that may be decimal (signed or unsigned), 0x-prefixed hex,
+        // or bare hex (no prefix, e.g. Flea3 ChunkID "0504000A").
+        private static ulong ParseHexOrDec64(string s)
+        {
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                return Convert.ToUInt64(s, 16);
+            if (ulong.TryParse(s, out ulong dec)) return dec;
+            if (long.TryParse(s, out long signed)) return (ulong)signed;  // negative decimals e.g. -1
+            return Convert.ToUInt64(s, 16);  // bare hex, no prefix
         }
 
         private static NodeAccessMode ParseAccessMode(string s)
@@ -1169,6 +1251,7 @@ namespace Bonsai.GenICam.GenApi
                 case "RO": return NodeAccessMode.RO;
                 case "WO": return NodeAccessMode.WO;
                 case "NA": return NodeAccessMode.NA;
+                case "NI": return NodeAccessMode.NI;
                 default: return NodeAccessMode.RW;
             }
         }
