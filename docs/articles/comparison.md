@@ -41,13 +41,15 @@ The blocking GenTL event loop is the idiomatic approach for GenTL consumers and 
 
 | Package | Approach |
 |---|---|
-| `Bonsai.GenICam` | `FeatureConfiguration` — full UI editor, per-feature overrides, persisted in `.bonsai`, auto-reset when camera model changes |
+| `Bonsai.GenICam` | `FeatureConfiguration` — full UI editor, per-feature overrides, persisted in `.bonsai`, applied best-effort at startup (unsupported features skipped silently) |
 | Pylon | Load a `.pfs` parameter file (`ParameterFile` property) |
 | Spinnaker, Vimba | `virtual Configure()` override point for subclasses |
 | Ximea | Typed properties (`Exposure`, `Gain`, `ImageFormat`) |
 | Sapera | Typed properties with min/max clamping validation |
 
 `Bonsai.GenICam`'s approach is the most ergonomic for end users — no subclassing, no external files, live editing in the Bonsai IDE.
+
+The override list currently persists across camera-selection changes, which lets a single workflow carry a common set of overrides (e.g. `ExposureTime`, `Gain`, `PixelFormat`) across different camera models — unsupported features are skipped silently at startup. *Opportunity:* optionally auto-resetting the list when the selected camera model changes would catch overrides that no longer apply, at the cost of this model-agnostic reuse — see issue #8 for the trade-off.
 
 ## Output type
 
