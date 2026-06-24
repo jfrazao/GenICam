@@ -28,9 +28,9 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             Console.WriteLine();
 
             // --- Chunk decode (offline) ---
-            // Deterministic; runs with no camera attached. Reads the saved example-camera XML
+            // Deterministic; runs with no camera attached. Reads the saved tested-camera XML
             // fixtures copied next to the executable and exercises the chunk-ID map + TryReadChunk.
-            ChunkDataTester.RunOffline(System.IO.Path.Combine(AppContext.BaseDirectory, "example-camera-xml"));
+            ChunkDataTester.RunOffline(System.IO.Path.Combine(AppContext.BaseDirectory, "testedCameraXml"));
 
             // --- Enumerate ---
             Console.WriteLine("Enumerating GenICam devices...");
@@ -65,9 +65,9 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                     Console.WriteLine($"XML length: {xml.Length} bytes");
                     
                     // Save to file
-                    string outputDir = System.IO.Path.Combine(AppContext.BaseDirectory, "example-camera-xml");
+                    string outputDir = System.IO.Path.Combine(AppContext.BaseDirectory, "testedCameraXml");
                     System.IO.Directory.CreateDirectory(outputDir);
-                    string filename = System.IO.Path.Combine(outputDir, $"camera_{i}_{devices[i].Model.Replace(" ", "_")}.xml");
+                    string filename = System.IO.Path.Combine(outputDir, $"{devices[i].Model.Replace(" ", "_")}.xml");
                     System.IO.File.WriteAllText(filename, xml);
                     Console.WriteLine($"Saved to: {filename}");
                 }
