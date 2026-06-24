@@ -71,9 +71,10 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
         {
             Console.WriteLine("=== Chunk mode (live capture, ChunkModeActive=true) ===");
 
-            // Setting ChunkModeActive=true makes the device enable every chunk selector the camera
-            // exposes (on the acquisition connection, before AcquisitionStart) and decode the
-            // embedded metadata into GenICamFrame.ChunkData — no separate setup needed here.
+            // EnableAllChunks is an internal test-only seam: it makes the device enable every chunk
+            // selector the camera exposes (on the acquisition connection, before AcquisitionStart)
+            // so the capture exercises the full metadata set. Real workflows leave it off and
+            // configure chunks via a UserSet instead.
             var device = new GenICamDevice
             {
                 ProducerPath    = producerPath,
@@ -82,6 +83,7 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                 FrameTimeoutMs  = 5000,
                 AcquireFrames   = true,
                 ChunkModeActive = true,
+                EnableAllChunks = true,
             };
 
             int frameCount = 0, framesWithChunk = 0;
