@@ -17,6 +17,12 @@
     <PackageReference Include="OpenCV.Net.runtime.win-x64" Version="2.4.13" />
   </ItemGroup>
 
+  <!-- Ship the saved GenICam XML fixtures so the offline chunk-decode test can read them
+       without a connected camera. A live run re-extracts over these from the real device. -->
+  <ItemGroup>
+    <Content Include="example-camera-xml\*.xml" Link="example-camera-xml\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- .NET Framework SDK-style projects don't auto-copy runtimes/ native DLLs; do it explicitly. -->
   <Target Name="CopyOpenCVNativeDlls" AfterTargets="Build">
     <ItemGroup>

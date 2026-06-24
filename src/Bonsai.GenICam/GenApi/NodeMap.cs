@@ -28,6 +28,17 @@ namespace Bonsai.GenICam.GenApi
             ParseXml(xml);
         }
 
+        // Offline constructor: parses a GenICam XML string with no live device. Only the
+        // XML-derived surfaces (node graph, chunk ID map, TryReadChunk) are usable — Read/Write
+        // throw because there is no port to talk to. Used by the unit-test harness to exercise
+        // chunk decoding deterministically against the saved example-camera XML fixtures.
+        internal NodeMap(string xml)
+        {
+            _api = null!;
+            _port = IntPtr.Zero;
+            ParseXml(xml);
+        }
+
         private void ParseXml(string xmlText)
         {
             var doc = XDocument.Parse(xmlText);
