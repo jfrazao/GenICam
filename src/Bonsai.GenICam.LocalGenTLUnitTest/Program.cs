@@ -63,12 +63,14 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                 {
                     string xml = GenICamXmlExtractor.ExtractXml(producerPath, i);
                     Console.WriteLine($"XML length: {xml.Length} bytes");
-                    
-                    // Save to file
+
+                    // Save to file, pretty-printed. The raw producer XML is effectively one
+                    // multi-megabyte line; indenting it makes the fixtures readable and lets diffs
+                    // across firmware revisions show the actual node changes instead of one huge line.
                     string outputDir = System.IO.Path.Combine(AppContext.BaseDirectory, "testedCameraXml");
                     System.IO.Directory.CreateDirectory(outputDir);
                     string filename = System.IO.Path.Combine(outputDir, $"{devices[i].Model.Replace(" ", "_")}.xml");
-                    System.IO.File.WriteAllText(filename, xml);
+                    SaveFormattedXml(filename, xml);
                     Console.WriteLine($"Saved to: {filename}");
                 }
                 catch (Exception ex)
@@ -207,6 +209,29 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
 
             Console.WriteLine();
             Console.WriteLine("Test complete.");
+        }
+
+        // Writes XML indented (2 spaces, LF line endings, UTF-8 no BOM) so saved fixtures are
+        // readable and diff cleanly. Falls back to the raw text if the XML cannot be parsed.
+        static void SaveFormattedXml(string path, string xml)
+        {
+            try
+            {
+                var doc = System.Xml.Linq.XDocument.Parse(xml);
+                var settings = new System.Xml.XmlWriterSettings
+                {
+                    Indent = true,
+                    IndentChars = "  ",
+                    NewLineChars = "\n",
+                    Encoding = new System.Text.UTF8Encoding(false),
+                };
+                using (var w = System.Xml.XmlWriter.Create(path, settings))
+                    doc.Save(w);
+            }
+            catch
+            {
+                System.IO.File.WriteAllText(path, xml);
+            }
         }
     }
 }
