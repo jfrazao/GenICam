@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--===========================================================
 Copyright (c) 2014 Hangzhou Hikrobot Technology Co., Ltd. All Rights Reserved..
 
@@ -48,7 +48,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <pFeature>DeviceVersion</pFeature>
     <pFeature>DeviceFirmwareVersion</pFeature>
     <pFeature>DeviceSerialNumber</pFeature>
-    <pFeature>DeviceYSXID</pFeature>  
+    <pFeature>DeviceYSXID</pFeature>
     <pFeature>DeviceUserID</pFeature>
     <pFeature>MaximumDeviceResponseTime</pFeature>
     <pFeature>DeviceManifestTableAddress</pFeature>
@@ -635,8 +635,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pFeature>TestPendingAck</pFeature>
   </Category>
-  <Port Name="Device" NameSpace="Standard">
-</Port>
+  <Port Name="Device" NameSpace="Standard"></Port>
   <Integer Name="One_Int">
     <Value>1</Value>
   </Integer>
@@ -2219,7 +2218,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
       <Length>32</Length>
       <AccessMode>RO</AccessMode>
       <pPort>Device</pPort>
-    </StringReg>    
+    </StringReg>
     <StringReg Name="DeviceUserID" NameSpace="Standard">
       <ToolTip>User Defined Name.</ToolTip>
       <Description>User Defined Name.</Description>

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <RegisterDescription xmlns:xi="http://www.w3.org/2003/XInclude" ModelName="BFS_U3_16S2" MajorVersion="1" MinorVersion="0" SubMinorVersion="0" SchemaMajorVersion="1" SchemaMinorVersion="1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.genicam.org/GenApi/Version_1_1" VendorName="FLIR" StandardNameSpace="None" SchemaSubMinorVersion="1" ToolTip="FLIR Camera" ProductGuid="EE4B7E09-DA29-4956-A1EC-56226E31CF9C" VersionGuid="85400240-452F-43af-8CDD-4B721C1D261A" xsi:schemaLocation="http://www.genicam.org/GenApi/Version_1_1 http://www.genicam.org/GenApi/GenApiSchema_Version_1_1.xsd">
   <Integer Name="SensorWidth" NameSpace="Standard">
     <ToolTip>Effective width of the sensor in pixels.</ToolTip>
