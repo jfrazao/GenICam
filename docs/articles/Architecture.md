@@ -28,13 +28,15 @@ src/Bonsai.GenICam/
 ├── GenICamMessage.cs          # Immutable message: ReadRequest / WriteRequest / ReadResponse /
 │                              #   WriteAck / Frame; carries FeatureName + Payload + Frame
 ├── GenICamFrame.cs            # Frame wrapper: IplImage + Timestamp + TimestampNs +
-│                              #   FrameId + IsIncomplete
+│                              #   FrameId + IsIncomplete + ChunkData (per-frame metadata)
 ├── CreateReadMessage.cs       # Combinator — emits a ReadRequest message on each upstream element
 ├── CreateWriteMessage.cs      # Combinator — emits a WriteRequest message; typed overloads for
 │                              #   string, double, long, bool, FeatureValue
 ├── FilterMessage.cs           # Combinator — passes messages matching FeatureName and/or MessageType
 ├── ParseFeature.cs            # ParseFeature — strongly typed output edge (double/long/bool/string)
 │                              #   via ExpressionBuilder; non-matching messages silently skipped
+├── ParseChunk.cs              # ParseChunk — strongly typed output edge for a named chunk-data
+│                              #   field from each frame's GenICamFrame.ChunkData
 ├── EnumerateDevices.cs        # Source<DeviceInfo[]> — lists cameras
 ├── ListFeatureValues.cs       # Source<FeatureValue[]> — reads all readable features
 ├── FeatureConfiguration.cs    # FeatureOverride list, editor form, UITypeEditors,

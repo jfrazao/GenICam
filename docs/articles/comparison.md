@@ -53,11 +53,11 @@ The blocking GenTL event loop is the idiomatic approach for GenTL consumers and 
 
 | Package | Output |
 |---|---|
-| `Bonsai.GenICam` | `GenICamFrame` — carries `IplImage` + `TimestampNs` + `FrameId` + `IsIncomplete` |
+| `Bonsai.GenICam` | `GenICamFrame` — carries `IplImage` + `TimestampNs` + `FrameId` + `IsIncomplete` + `ChunkData` |
 | Spinnaker, Pylon, Vimba | Vendor `DataFrames` (raw image + metadata; needs a downstream conversion step) |
 | Ximea, Sapera | Vendor `DataFrames` |
 
-`GenICamFrame` aligns with the richer metadata carried by vendor DataFrames. The `Image` property gives direct access to the `IplImage` for use in Bonsai Vision pipelines; `TimestampNs` and `FrameId` enable synchronisation with other data streams (ephys, behaviour cameras) without a downstream adapter.
+`GenICamFrame` aligns with the richer metadata carried by vendor DataFrames. The `Image` property gives direct access to the `IplImage` for use in Bonsai Vision pipelines; `TimestampNs` and `FrameId` enable synchronisation with other data streams (ephys, behaviour cameras) without a downstream adapter. When chunk mode is active, `ChunkData` exposes the per-frame metadata the camera embeds in each buffer (exposure, gain, timestamp, frame ID, …), parsed straight from the GenTL buffer.
 
 ## Unique aspects of Bonsai.GenICam
 
