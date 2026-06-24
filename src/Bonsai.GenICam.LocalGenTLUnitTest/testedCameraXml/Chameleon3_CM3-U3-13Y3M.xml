@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--===========================================================
-Copyright © 2015 Point Grey Research, Inc. All Rights Reserved.
+Copyright © 2016 Point Grey Research, Inc. All Rights Reserved.
 
 This software is the confidential and proprietary information of
 Point Grey Research, Inc. ("Confidential Information").  
@@ -28,6 +28,8 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <pFeature>TransportLayerControl</pFeature>
     <pFeature>ChunkDataControl</pFeature>
     <pFeature>EventControl</pFeature>
+    <pFeature>RemoveParameterLimits</pFeature>
+    <pFeature>UserDefinedValues</pFeature>
   </Category>
   <Port Name="Device" NameSpace="Standard">
     <Visibility>Invisible</Visibility>
@@ -69,8 +71,8 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <pFeature>AutoGainLowerLimit</pFeature>
     <pFeature>AutoGainUpperLimit</pFeature>
     <pFeature>BlackLevel</pFeature>
-    <pFeature>BlackLevelEnabled</pFeature>
     <pFeature>BlackLevelAuto</pFeature>
+    <pFeature>BlackLevelClampingEnable</pFeature>
     <pFeature>Gamma</pFeature>
     <pFeature>GammaEnabled</pFeature>
     <pFeature>Sharpness</pFeature>
@@ -210,30 +212,18 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Unit>dB</Unit>
     <Representation>Linear</Representation>
   </Float>
-  <Boolean Name="BlackLevelEnabled" NameSpace="Custom">
-    <ToolTip>Enables/disables black level adjustment.</ToolTip>
-    <Description>Enables/disables black level adjustment.</Description>
-    <DisplayName>Black Level Enabled</DisplayName>
-    <Visibility>Expert</Visibility>
-    <pIsImplemented>BlackLevelEnabledImplemented_Int</pIsImplemented>
+  <Boolean Name="BlackLevelClampingEnable" NameSpace="Custom">
+    <ToolTip>Enable the black level auto clamping feature which performing dark current compensation</ToolTip>
+    <Description>Enable the black level auto clamping feature which performing dark current compensation</Description>
+    <DisplayName>Black Level Clamping Enable</DisplayName>
+    <Visibility>Guru</Visibility>
+    <pIsImplemented>BlackLevelClampingEnable_Imp</pIsImplemented>
+    <pIsLocked>TLParamsLocked</pIsLocked>
     <ImposedAccessMode>RW</ImposedAccessMode>
-    <pValue>BlackLevelEnabled_Int</pValue>
+    <pValue>BlackLevelClampingEnable_Val</pValue>
     <OnValue>1</OnValue>
     <OffValue>0</OffValue>
   </Boolean>
-  <IntSwissKnife Name="BlackLevelEnabledImplemented_Int">
-    <pVariable Name="ABSCTRL">BlackLevelAbsCtrlInq_Bit</pVariable>
-    <pVariable Name="MANCTRL">BlackLevelManualInq_Bit</pVariable>
-    <pVariable Name="AUTOCTRL">BlackLevelAutoInq_Bit</pVariable>
-    <Formula>( ABSCTRL &amp;&amp; ( MANCTRL || AUTOCTRL ) ) ? 1 : 0</Formula>
-  </IntSwissKnife>
-  <IntConverter Name="BlackLevelEnabled_Int">
-    <pVariable Name="OLD">BlackLevelCtrl_Reg</pVariable>
-    <FormulaTo>( FROM = 1 ) ? ( OLD | 0x02000000 ) : ( OLD &amp; 0xFDFFFFFF )</FormulaTo>
-    <FormulaFrom>( ( TO &amp; 0x02000000 ) = 0x02000000 ) ? 1 : 0</FormulaFrom>
-    <pValue>BlackLevelCtrl_Reg</pValue>
-    <Slope>Varying</Slope>
-  </IntConverter>
   <Enumeration Name="BlackLevelAuto" NameSpace="Standard">
     <ToolTip>Controls the mode for automatic black level adjustment.</ToolTip>
     <Description>Controls the mode for automatic black level adjustment. The exact algorithm used to implement this adjustment is device-specific.</Description>
@@ -304,6 +294,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <DisplayName>Gamma</DisplayName>
     <Visibility>Beginner</Visibility>
     <pIsImplemented>GammaImplemented_Int</pIsImplemented>
+    <pIsAvailable>GammaOnOffInq_Bit</pIsAvailable>
     <pIsLocked>GammaLocked_Int</pIsLocked>
     <ImposedAccessMode>RW</ImposedAccessMode>
     <pValue>GammaAbsVal_Reg</pValue>
@@ -625,6 +616,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Length>4</Length>
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
+    <pInvalidator>RemoveLimits_Reg</pInvalidator>
     <Endianess>LittleEndian</Endianess>
   </FloatReg>
   <FloatReg Name="GainAbsMaxInq_Reg" NameSpace="Custom">
@@ -644,6 +636,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Cachable>NoCache</Cachable>
     <PollingTime>500</PollingTime>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>RemoveLimits_Reg</pInvalidator>
     <Endianess>LittleEndian</Endianess>
   </FloatReg>
   <FloatReg Name="AutoGainLowerLimitVal_Reg" NameSpace="Custom">
@@ -653,6 +646,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <AccessMode>RW</AccessMode>
     <pPort>Device</pPort>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>RemoveLimits_Reg</pInvalidator>
     <Endianess>LittleEndian</Endianess>
   </FloatReg>
   <FloatReg Name="AutoGainUpperLimitVal_Reg" NameSpace="Custom">
@@ -671,6 +665,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>RemoveLimits_Reg</pInvalidator>
     <Endianess>LittleEndian</Endianess>
   </FloatReg>
   <FloatReg Name="AutoGainRangeMax_Reg" NameSpace="Custom">
@@ -755,6 +750,24 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <pInvalidator>CurrentVideoMode_Reg</pInvalidator>
     <Endianess>LittleEndian</Endianess>
   </FloatReg>
+  <MaskedIntReg Name="BlackLevelClampingEnable_Imp">
+    <Address>0x1A18</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <Bit>31</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <MaskedIntReg Name="BlackLevelClampingEnable_Val">
+    <Address>0x1A18</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <Bit>0</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
   <StructReg Comment="Gamma Inquiry Register">
     <Address>0x518</Address>
     <pAddress>CamRegBaseAddress</pAddress>
@@ -1069,7 +1082,8 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Description>Balance White Auto is the 'automatic' counterpart of the manual white balance feature.</Description>
     <DisplayName>Balance White Auto</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsAvailable>BalanceWhiteAuto_OnOff_InqAvailable</pIsAvailable>
+    <pIsImplemented>BalanceRatio_AbsPresence</pIsImplemented>
+    <pIsAvailable>BalanceWhiteAuto_InqAvailable</pIsAvailable>
     <ImposedAccessMode>RW</ImposedAccessMode>
     <Streamable>Yes</Streamable>
     <EnumEntry Name="Off" NameSpace="Standard">
@@ -1095,7 +1109,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     </EnumEntry>
     <pValue>BalanceWhiteAuto_CtrlValue_Calc</pValue>
   </Enumeration>
-  <IntSwissKnife Name="BalanceWhiteAuto_InqPresence">
+  <IntSwissKnife Name="BalanceWhiteAuto_InqAvailable">
     <pVariable Name="HAS_CONT">BalanceWhiteAuto_Continuous_InqAvailable</pVariable>
     <pVariable Name="HAS_ONCE">BalanceWhiteAuto_Once_InqAvailable</pVariable>
     <Formula>HAS_CONT || HAS_ONCE</Formula>
@@ -1112,18 +1126,28 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Description>Selects a balance ratio to configure. Once a balance ratio control has been selected.</Description>
     <DisplayName>Balance Ratio Selector</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsAvailable>BalanceWhiteAuto_OnOff_InqAvailable</pIsAvailable>
+    <pIsImplemented>BalanceRatio_AbsPresence</pIsImplemented>
+    <pIsAvailable>BalanceRatioSelector_InqAvailable</pIsAvailable>
     <ImposedAccessMode>RW</ImposedAccessMode>
     <EnumEntry Name="Red" NameSpace="Standard">
       <ToolTip>Selects the red balance ratio control for adjustment</ToolTip>
       <Description>This enumeration value selects the red balance ratio control for adjustment.</Description>
       <DisplayName>Red</DisplayName>
+      <pIsImplemented>BalanceRatioSelector_Red_InqPresence</pIsImplemented>
       <Value>0</Value>
+    </EnumEntry>
+    <EnumEntry Name="Green" NameSpace="Standard">
+      <ToolTip>Selects the green balance ratio control for adjustment</ToolTip>
+      <Description>This enumeration value selects the green balance ratio control for adjustment.</Description>
+      <DisplayName>Green</DisplayName>
+      <pIsImplemented>BalanceRatioSelector_Green_InqPresence</pIsImplemented>
+      <Value>1</Value>
     </EnumEntry>
     <EnumEntry Name="Blue" NameSpace="Standard">
       <ToolTip>Selects the blue balance ratio control for adjustment</ToolTip>
       <Description>This enumeration value selects the blue balance ratio control for adjustment.</Description>
       <DisplayName>Blue</DisplayName>
+      <pIsImplemented>BalanceRatioSelector_Blue_InqPresence</pIsImplemented>
       <Value>2</Value>
     </EnumEntry>
     <pValue>BalanceRatioSelector_CtrlValue</pValue>
@@ -1139,7 +1163,9 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Description>This value sets the selected balance ratio control as an integer.</Description>
     <DisplayName>Balance Ratio</DisplayName>
     <Visibility>Expert</Visibility>
+    <pIsImplemented>BalanceRatio_AbsPresence</pIsImplemented>
     <pIsAvailable>BalanceRatio_InqAvailable</pIsAvailable>
+    <pIsLocked>BalanceRatio_AbsLocked</pIsLocked>
     <ImposedAccessMode>RW</ImposedAccessMode>
     <Streamable>Yes</Streamable>
     <pValue>BalanceRatioVal_Reg</pValue>
@@ -1147,21 +1173,14 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <pMax>BalanceRatioMax_Reg</pMax>
     <Representation>Linear</Representation>
   </Float>
-  <IntSwissKnife Name="BalanceRatio_InqImplemented">
-    <pVariable Name="ABSCTRL">BalanceRatio_AbsPresence</pVariable>
-    <pVariable Name="PRES">BalanceRatio_InqPresence</pVariable>
-    <Formula>( ABSCTRL &amp;&amp; PRES ) ? 1 : 0</Formula>
-  </IntSwissKnife>
   <IntSwissKnife Name="BalanceRatio_InqAvailable">
-    <pVariable Name="AUTO_MODE">BalanceWhiteAuto_CtrlValue_Calc</pVariable>
+    <pVariable Name="AVAIL">BalanceRatioSelector_InqAvailable</pVariable>
     <pVariable Name="ABSCTRL">BalanceRatio_AbsAvailable</pVariable>
-    <pVariable Name="WBL_ON">BalanceWhiteAuto_OnOff_InqAvailable</pVariable>
-    <Formula>(( AUTO_MODE = 0 ) &amp;&amp; ( ABSCTRL = 1 ) &amp;&amp; ( WBL_ON = 1 ) ) ? 1 : 0</Formula>
+    <Formula>(( AVAIL = 1 ) &amp;&amp; ( ABSCTRL = 1 )) ? 1 : 0</Formula>
   </IntSwissKnife>
-  <IntSwissKnife Name="BalanceRatio_InqPresence">
-    <pVariable Name="SEL">BalanceRatioSelector_CtrlValue</pVariable>
-    <pVariable Name="TO">BalanceRatio_InqPresence_Reg</pVariable>
-    <Formula>((SEL = 0) ? ((TO &amp; 0x80000000) &gt;&gt; 31) : ((SEL = 1) ? ((TO &amp; 0x80000000) &gt;&gt; 31) : ((SEL = 2) ? ((TO &amp; 0x80000000) &gt;&gt; 31) : 0xffffffff)))</Formula>
+  <IntSwissKnife Name="BalanceRatio_AbsLocked">
+    <pVariable Name="AUTO_MODE">BalanceWhiteAuto_CtrlValue_Calc</pVariable>
+    <Formula>( AUTO_MODE = 0 ) ? 0 : 1</Formula>
   </IntSwissKnife>
   <StructReg Comment="Balance White Inquiry Register">
     <Address>0x50c</Address>
@@ -1175,6 +1194,9 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <StructEntry Name="BalanceRatioSelector_InqPresence" NameSpace="Custom">
       <Bit>31</Bit>
     </StructEntry>
+    <StructEntry Name="BalanceWhiteAuto_Once_InqAvailable" NameSpace="Custom">
+      <Bit>28</Bit>
+    </StructEntry>
     <StructEntry Name="BalanceWhiteAuto_OnOff_InqAvailable" NameSpace="Custom">
       <Bit>26</Bit>
     </StructEntry>
@@ -1183,9 +1205,6 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     </StructEntry>
     <StructEntry Name="BalanceWhiteAuto_Off_InqAvailable" NameSpace="Custom">
       <Bit>24</Bit>
-    </StructEntry>
-    <StructEntry Name="BalanceWhiteAuto_Once_InqAvailable" NameSpace="Custom">
-      <Bit>28</Bit>
     </StructEntry>
   </StructReg>
   <IntReg Name="BalanceWhiteAuto_CtrlValue">
@@ -1196,6 +1215,8 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <pPort>Device</pPort>
     <Cachable>NoCache</Cachable>
     <PollingTime>5000</PollingTime>
+    <pInvalidator>PixelFormat</pInvalidator>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
@@ -1205,27 +1226,39 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Length>4</Length>
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
+    <pInvalidator>PixelFormat</pInvalidator>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <Bit>31</Bit>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </MaskedIntReg>
   <MaskedIntReg Name="BalanceRatioSelector_Red_InqPresence" NameSpace="Custom">
-    <Address>0x80c</Address>
+    <Address>0x5300</Address>
     <pAddress>CamRegBaseAddress</pAddress>
     <Length>4</Length>
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
-    <Bit>31</Bit>
+    <Bit>2</Bit>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <MaskedIntReg Name="BalanceRatioSelector_Green_InqPresence" NameSpace="Custom">
+    <Address>0x5300</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <Bit>1</Bit>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </MaskedIntReg>
   <MaskedIntReg Name="BalanceRatioSelector_Blue_InqPresence" NameSpace="Custom">
-    <Address>0x80c</Address>
+    <Address>0x5300</Address>
     <pAddress>CamRegBaseAddress</pAddress>
     <Length>4</Length>
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
-    <Bit>31</Bit>
+    <Bit>0</Bit>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </MaskedIntReg>
@@ -1237,24 +1270,12 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Cachable>NoCache</Cachable>
     <PollingTime>500</PollingTime>
     <pInvalidator>BalanceRatioSelector</pInvalidator>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <Endianess>LittleEndian</Endianess>
   </FloatReg>
   <IntSwissKnife Name="BalanceRatioVal_ColorReg">
     <pVariable Name="SEL">BalanceRatioSelector_CtrlValue</pVariable>
     <Formula>((SEL = 0) ? 0xf0f05304 : ((SEL = 1) ? 0xf0f05308 : ((SEL = 2) ? 0xf0f0530c : 0xffffffff)))</Formula>
-  </IntSwissKnife>
-  <IntReg Name="BalanceRatio_InqPresence_Reg">
-    <pAddress>BalanceRatio_InqPresence_adrCalc</pAddress>
-    <Length>4</Length>
-    <AccessMode>RO</AccessMode>
-    <pPort>Device</pPort>
-    <pInvalidator>BalanceRatioSelector</pInvalidator>
-    <Sign>Unsigned</Sign>
-    <Endianess>LittleEndian</Endianess>
-  </IntReg>
-  <IntSwissKnife Name="BalanceRatio_InqPresence_adrCalc">
-    <pVariable Name="SEL">BalanceRatioSelector_CtrlValue</pVariable>
-    <Formula>((SEL = 0) ? 0xf0f0050c : ((SEL = 2) ? 0xf0f0050c : 0xffffffff))</Formula>
   </IntSwissKnife>
   <MaskedIntReg Name="BalanceRatio_AbsPresence" NameSpace="Custom">
     <Address>0x5300</Address>
@@ -1283,6 +1304,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
     <pInvalidator>BalanceRatioSelector</pInvalidator>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <Endianess>LittleEndian</Endianess>
   </FloatReg>
   <FloatReg Name="BalanceRatioMax_Reg">
@@ -1292,6 +1314,7 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
     <pInvalidator>BalanceRatioSelector</pInvalidator>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <Endianess>LittleEndian</Endianess>
   </FloatReg>
   <Category Name="DeviceControl" NameSpace="Standard">
@@ -2348,6 +2371,11 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <pFeature>AcquisitionStatusSelector</pFeature>
     <pFeature>AcquisitionStatus</pFeature>
     <pFeature>SingleFrameAcquisitionMode</pFeature>
+    <pFeature>TransmitFrameCount</pFeature>
+    <pFeature>pgrHDRModeEnabled</pFeature>
+    <pFeature>pgrHDRImageSelector</pFeature>
+    <pFeature>pgrHDR_ExposureTimeAbs</pFeature>
+    <pFeature>pgrHDR_GainAbs</pFeature>
   </Category>
   <Enumeration Name="TriggerSelector" NameSpace="Standard">
     <ToolTip>Selects the type of trigger to configure.</ToolTip>
@@ -2572,28 +2600,28 @@ MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
     <Description>Sets the automatic exposure mode when Exposure Mode is Timed.</Description>
     <DisplayName>Exposure Auto</DisplayName>
     <Visibility>Beginner</Visibility>
-    <pIsImplemented>ExposureAutoInq_Bit</pIsImplemented>
+    <pIsImplemented>ExposurePresInq_Reg</pIsImplemented>
     <pIsLocked>ExposureAutoLock_Int</pIsLocked>
     <ImposedAccessMode>RW</ImposedAccessMode>
     <EnumEntry Name="Off" NameSpace="Standard">
       <ToolTip>Exposure set to manual control.</ToolTip>
       <Description>Exposure set to manual control.</Description>
       <DisplayName>Off</DisplayName>
-      <pIsImplemented>ExposureManualInq_Bit</pIsImplemented>
+      <pIsAvailable>ExposureAutoOffImp_Int</pIsAvailable>
       <Value>0</Value>
     </EnumEntry>
     <EnumEntry Name="Once" NameSpace="Standard">
       <ToolTip>Exposure is automatically adjusted once, then returns to Off.</ToolTip>
       <Description>Exposure is automatically adjusted once, then returns to Off.</Description>
       <DisplayName>Once</DisplayName>
-      <pIsImplemented>ExposureOnePushInq_Bit</pIsImplemented>
+      <pIsAvailable>ExposureOnePushInq_Bit</pIsAvailable>
       <Value>1</Value>
     </EnumEntry>
     <EnumEntry Name="Continuous" NameSpace="Standard">
       <ToolTip>Exposure is automatically adjusted by the camera</ToolTip>
       <Description>Exposure is automatically adjusted by the camera</Description>
       <DisplayName>Continuous</DisplayName>
-      <pIsImplemented>ExposureAutoInq_Bit</pIsImplemented>
+      <pIsAvailable>ExposureAutoInq_Bit</pIsAvailable>
       <Value>2</Value>
     </EnumEntry>
     <pValue>ExposureAutoCtrl_Int</pValue>
@@ -2609,6 +2637,13 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <pValue>ExposureCtrl_Reg</pValue>
     <Slope>Varying</Slope>
   </IntConverter>
+  <IntSwissKnife Name="ExposureAutoOffImp_Int">
+    <pVariable Name="EXPMODE">ExposureMode_Int</pVariable>
+    <pVariable Name="EXPMANUALINQ">ExposureManualInq_Bit</pVariable>
+    <Formula>
+(( EXPMODE = 1 ) || ( EXPMANUALINQ = 1 )) ? 1 : 0
+</Formula>
+  </IntSwissKnife>
   <Float Name="ExposureTime" NameSpace="Standard">
     <ToolTip>Exposure time in microseconds when Exposure Mode is Timed and ExposureAuto is Off.</ToolTip>
     <Description>Exposure time in microseconds when Exposure Mode is Timed and ExposureAuto is Off.</Description>
@@ -2953,7 +2988,7 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <ToolTip>Selects the internal acquisition signal to read using AcquisitionStatus.</ToolTip>
     <Description>Selects the internal acquisition signal to read using AcquisitionStatus.</Description>
     <DisplayName>Acquisition Status Selector</DisplayName>
-    <Visibility>Guru</Visibility>
+    <Visibility>Expert</Visibility>
     <ImposedAccessMode>RW</ImposedAccessMode>
     <EnumEntry Name="FrameTriggerWait" NameSpace="Standard">
       <DisplayName>FrameTriggerWait</DisplayName>
@@ -2965,7 +3000,7 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <ToolTip>Reads the state of the internal acquisition signal selected using AcquisitionStatusSelector.</ToolTip>
     <Description>Reads the state of the internal acquisition signal selected using AcquisitionStatusSelector.</Description>
     <DisplayName>Acquisition Status</DisplayName>
-    <Visibility>Guru</Visibility>
+    <Visibility>Expert</Visibility>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>AcquisitionStatus_Int</pValue>
     <OnValue>1</OnValue>
@@ -2992,6 +3027,105 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     </EnumEntry>
     <pValue>SingleFrameAcquisitionMode_Reg</pValue>
   </Enumeration>
+  <Integer Name="TransmitFrameCount" NameSpace="Custom">
+    <ToolTip>Number of images transmitted from the camera.</ToolTip>
+    <Description>Number of images transmitted from the camera.</Description>
+    <DisplayName>Transmit Frame Count</DisplayName>
+    <Visibility>Expert</Visibility>
+    <pIsImplemented>TransmitFrameCount_Imp</pIsImplemented>
+    <ImposedAccessMode>RO</ImposedAccessMode>
+    <pValue>TransmitFrameCount_Val</pValue>
+  </Integer>
+  <Boolean Name="pgrHDRModeEnabled" NameSpace="Custom">
+    <ToolTip>Specifies whether or not the High Dynamic Range mode is enabled.</ToolTip>
+    <Description>Specifies whether or not the High Dynamic Range mode is enabled.</Description>
+    <DisplayName>High Dynamic Range Mode Enabled</DisplayName>
+    <Visibility>Guru</Visibility>
+    <pIsImplemented>pgrHDR_PresInq_Bit</pIsImplemented>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <pValue>pgrHDR_OnOff_Bit</pValue>
+  </Boolean>
+  <Enumeration Name="pgrHDRImageSelector" NameSpace="Custom">
+    <ToolTip>Selects the HDR image.</ToolTip>
+    <Description>Selects the HDR image.</Description>
+    <DisplayName>HDR Image Selector</DisplayName>
+    <Visibility>Guru</Visibility>
+    <pIsImplemented>pgrHDR_PresInq_Bit</pIsImplemented>
+    <pIsAvailable>pgrHDR_OnOff_Bit</pIsAvailable>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <EnumEntry Name="Image1" NameSpace="Custom">
+      <ToolTip>HDR image 1.</ToolTip>
+      <Description>HDR image 1.</Description>
+      <DisplayName>Image 1</DisplayName>
+      <Value>0</Value>
+    </EnumEntry>
+    <EnumEntry Name="Image2" NameSpace="Custom">
+      <ToolTip>HDR image 2.</ToolTip>
+      <Description>HDR image 2.</Description>
+      <DisplayName>Image 2</DisplayName>
+      <Value>1</Value>
+    </EnumEntry>
+    <EnumEntry Name="Image3" NameSpace="Custom">
+      <ToolTip>HDR image 3.</ToolTip>
+      <Description>HDR image 3.</Description>
+      <DisplayName>Image 3</DisplayName>
+      <Value>2</Value>
+    </EnumEntry>
+    <EnumEntry Name="Image4" NameSpace="Custom">
+      <ToolTip>HDR image 4.</ToolTip>
+      <Description>HDR image 4.</Description>
+      <DisplayName>Image 4</DisplayName>
+      <Value>3</Value>
+    </EnumEntry>
+    <pValue>pgrHDR_ImageValue</pValue>
+    <pSelected>pgrHDR_ExposureTimeAbs</pSelected>
+    <pSelected>pgrHDR_GainAbs</pSelected>
+  </Enumeration>
+  <Integer Name="pgrHDR_ImageValue">
+    <Value>0</Value>
+  </Integer>
+  <Float Name="pgrHDR_ExposureTimeAbs" NameSpace="Custom">
+    <ToolTip>Exposure time in microseconds of selected HDR image.</ToolTip>
+    <Description>Exposure time in microseconds of selected HDR image.</Description>
+    <DisplayName>HDR Exposure Time Abs</DisplayName>
+    <Visibility>Guru</Visibility>
+    <pIsImplemented>pgrHDR_ShutterPresInq_Bit</pIsImplemented>
+    <pIsAvailable>pgrHDR_OnOff_Bit</pIsAvailable>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <pValue>pgrHDR_ShutterUsAbsVal_Reg</pValue>
+    <pMin>ExposureMinUsInq_Float</pMin>
+    <pMax>ExposureMaxUsInq_Float</pMax>
+    <Unit>us</Unit>
+    <Representation>Linear</Representation>
+  </Float>
+  <Converter Name="pgrHDR_ShutterUsAbsVal_Reg">
+    <FormulaTo>FROM/1000000</FormulaTo>
+    <FormulaFrom>TO*1000000</FormulaFrom>
+    <pValue>pgrHDR_ShutterAbsVal_Reg</pValue>
+    <Slope>Increasing</Slope>
+  </Converter>
+  <Float Name="pgrHDR_GainAbs" NameSpace="Custom">
+    <ToolTip>Gain applied to the HDR image in dB</ToolTip>
+    <Description>Gain applied to the HDR image in dB.</Description>
+    <DisplayName>HDR Gain Abs</DisplayName>
+    <Visibility>Guru</Visibility>
+    <pIsImplemented>pgrHDR_GainPresInq_Bit</pIsImplemented>
+    <pIsAvailable>pgrHDR_OnOff_Bit</pIsAvailable>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <pValue>pgrHDR_GainAbsVal_Reg</pValue>
+    <pMin>GainAbsMinInq_Reg</pMin>
+    <pMax>GainAbsMaxInq_Reg</pMax>
+    <Unit>dB</Unit>
+    <Representation>Linear</Representation>
+  </Float>
+  <IntSwissKnife Name="pgrHDR_ImageRegOffset">
+    <pVariable Name="CHAN">pgrHDR_ImageValue</pVariable>
+    <Formula>0xf0f00000 + ( CHAN * 0x20 )</Formula>
+  </IntSwissKnife>
+  <IntSwissKnife Name="pgrHDR_ImageAbsRegOffset">
+    <pVariable Name="CHAN">pgrHDR_ImageValue</pVariable>
+    <Formula>0xf0f00000 + ( CHAN * 0x04 )</Formula>
+  </IntSwissKnife>
   <StructReg Comment="Trigger Inquiry Register">
     <Address>0x530</Address>
     <pAddress>CamRegBaseAddress</pAddress>
@@ -3138,6 +3272,8 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>TriggerModeOnOff_Bit</pInvalidator>
+    <pInvalidator>ExposureMode_Int</pInvalidator>
     <Endianess>LittleEndian</Endianess>
     <StructEntry Name="ExposurePresInq_Reg" NameSpace="Custom">
       <Bit>31</Bit>
@@ -3172,6 +3308,8 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <Length>4</Length>
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
+    <pInvalidator>AcqFrameRateEnCtrlVal_Reg</pInvalidator>
+    <pInvalidator>TriggerModeOnOff_Bit</pInvalidator>
     <pInvalidator>ExposureAutoCtrl_Int</pInvalidator>
     <pInvalidator>AcqFrameRateCtrlVal_Reg</pInvalidator>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
@@ -3183,6 +3321,8 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <Length>4</Length>
     <AccessMode>RO</AccessMode>
     <pPort>Device</pPort>
+    <pInvalidator>AcqFrameRateEnCtrlVal_Reg</pInvalidator>
+    <pInvalidator>TriggerModeOnOff_Bit</pInvalidator>
     <pInvalidator>ExposureAutoCtrl_Int</pInvalidator>
     <pInvalidator>AcqFrameRateCtrlVal_Reg</pInvalidator>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
@@ -3510,6 +3650,86 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
+  <MaskedIntReg Name="TransmitFrameCount_Imp">
+    <Address>0x1218</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <Bit>31</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <IntReg Name="TransmitFrameCount_Val">
+    <Address>0x121C</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <Cachable>NoCache</Cachable>
+    <PollingTime>250</PollingTime>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </IntReg>
+  <MaskedIntReg Name="pgrHDR_PresInq_Bit">
+    <Address>0x1800</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <Bit>31</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <MaskedIntReg Name="pgrHDR_OnOff_Bit">
+    <Address>0x1800</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>ExposureAuto</pInvalidator>
+    <pInvalidator>ExposureMode</pInvalidator>
+    <pInvalidator>GainAuto</pInvalidator>
+    <Bit>25</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <MaskedIntReg Name="pgrHDR_ShutterPresInq_Bit">
+    <Address>0x1820</Address>
+    <pAddress>pgrHDR_ImageRegOffset</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <Bit>31</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <MaskedIntReg Name="pgrHDR_GainPresInq_Bit">
+    <Address>0x1824</Address>
+    <pAddress>pgrHDR_ImageRegOffset</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <Bit>31</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <FloatReg Name="pgrHDR_ShutterAbsVal_Reg" NameSpace="Custom">
+    <Address>0x18b0</Address>
+    <pAddress>pgrHDR_ImageAbsRegOffset</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <Endianess>LittleEndian</Endianess>
+  </FloatReg>
+  <FloatReg Name="pgrHDR_GainAbsVal_Reg" NameSpace="Custom">
+    <Address>0x18a0</Address>
+    <pAddress>pgrHDR_ImageAbsRegOffset</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <Endianess>LittleEndian</Endianess>
+  </FloatReg>
   <Category Name="ImageFormatControl" NameSpace="Standard">
     <ToolTip>Category for image format control features.</ToolTip>
     <Description>Category for image format control features.</Description>
@@ -3525,14 +3745,17 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <pFeature>OffsetY</pFeature>
     <pFeature>SensorWidth</pFeature>
     <pFeature>SensorHeight</pFeature>
+    <pFeature>SensorShutterMode</pFeature>
     <pFeature>WidthMax</pFeature>
     <pFeature>HeightMax</pFeature>
     <pFeature>VideoMode</pFeature>
     <pFeature>BinningHorizontal</pFeature>
     <pFeature>BinningVertical</pFeature>
+    <pFeature>BinningControl</pFeature>
     <pFeature>DecimationHorizontal</pFeature>
     <pFeature>DecimationVertical</pFeature>
     <pFeature>ReverseX</pFeature>
+    <pFeature>ReverseY</pFeature>
     <pFeature>PixelSize</pFeature>
     <pFeature>PixelColorFilter</pFeature>
     <pFeature>PixelDynamicRangeMin</pFeature>
@@ -3980,6 +4203,40 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
       <Sign>Unsigned</Sign>
     </StructEntry>
   </StructReg>
+  <StructReg Comment="Sensor Shutter Mode Register">
+    <Address>0x5520</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>TriggerModeOnOff_Bit</pInvalidator>
+    <Endianess>LittleEndian</Endianess>
+    <StructEntry Name="SensorShutterModeInq_Pres" NameSpace="Custom">
+      <LSB>31</LSB>
+      <MSB>31</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="SensorShutterModeGlobal_Pres" NameSpace="Custom">
+      <LSB>30</LSB>
+      <MSB>30</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="SensorShutterModeRolling_Pres" NameSpace="Custom">
+      <LSB>29</LSB>
+      <MSB>29</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="SensorShutterModeGlobalReset_Pres" NameSpace="Custom">
+      <LSB>28</LSB>
+      <MSB>28</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="SensorShutterMode_Val" NameSpace="Custom">
+      <LSB>0</LSB>
+      <MSB>1</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+  </StructReg>
   <Category Name="PixelDefectControl" NameSpace="Custom">
     <pFeature>pgrDefectPixelCorrectionType</pFeature>
     <pFeature>pgrDefectPixelCorrectionEnable</pFeature>
@@ -4007,14 +4264,16 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
   <IntSwissKnife Name="OBCPLocked_Int">
     <pVariable Name="TLP">TLParamsLocked</pVariable>
     <pVariable Name="ID">ColorCodingID_Reg</pVariable>
-    <pVariable Name="M8">OBCP_Mono8Inq_Bit</pVariable>
-    <pVariable Name="M16">OBCP_Mono16Inq_Bit</pVariable>
-    <pVariable Name="M12P">OBCP_Mono12pInq_Bit</pVariable>
+    <pVariable Name="R8">OBCP_Raw8Inq_Bit</pVariable>
+    <pVariable Name="R16">OBCP_Raw16Inq_Bit</pVariable>
+    <pVariable Name="R12PACKED">OBCP_Raw12PackedInq_Bit</pVariable>
+    <pVariable Name="R12P">OBCP_Raw12PInq_Bit</pVariable>
     <Formula>
 ( TLP ? 1 :
-( ( ( ID = 0 )  &amp; M8   ) ? 0 :
-( ( ( ID = 5 )  &amp; M16  ) ? 0 :
-( ( ( ID = 11 ) &amp; M12P ) ? 0 : 1 ) ) ) )
+( ( ( ID = 0 )  &amp; R8   ) ? 0 :
+( ( ( ID = 5 )  &amp; R16  ) ? 0 :
+( ( ( ID = 11 ) &amp; R12PACKED  ) ? 0 :
+( ( ( ID = 13 ) &amp; R12P ) ? 0 : 1 ) ) ) ) )
 </Formula>
   </IntSwissKnife>
   <IntConverter Name="OBCPEnabled_Int">
@@ -4023,13 +4282,15 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <FormulaTo>
 ( ( ID = 0 ) ? ( FROM ? ( OLD &amp; 0xFFFFFFFE ) : ( OLD | 0x00000001 ) ) :
 ( ( ID = 5 ) ? ( FROM ? ( OLD &amp; 0xFFFFFFFD ) : ( OLD | 0x00000002 ) ) :
-( ( ID = 12) ? ( FROM ? ( OLD &amp; 0xFFFFFFFB ) : ( OLD | 0x00000004 ) ) : OLD ) ) )
+( ( ID = 11 )? ( FROM ? ( OLD &amp; 0xFFFFFFFB ) : ( OLD | 0x00000004 ) ) :
+( ( ID = 13) ? ( FROM ? ( OLD &amp; 0xFFFFFFF7 ) : ( OLD | 0x00000008 ) ) : OLD ) ) ) )
 </FormulaTo>
     <FormulaFrom>
 ( ( ID = 0 ) ? ( ( TO &amp; 0x00000001 ) ? 0 : 1 ) :
 ( ( ID = 5 ) ? ( ( TO &amp; 0x00000002 ) ? 0 : 1 ) :
-( ( ID = 12) ? ( ( TO &amp; 0x00000004 ) ? 0 : 1 ) :
-( ( ( ID = 9 ) || (ID = 10 ) || ( ID = 12 ) ) ? 0 : 1 ) ) ) )
+( ( ID = 11) ? ( ( TO &amp; 0x00000004 ) ? 0 : 1 ) :
+( ( ID = 13) ? ( ( TO &amp; 0x00000008 ) ? 0 : 1 ) :
+( ( ( ID = 9 ) || (ID = 10 ) || ( ID = 12 ) || ( ID = 14 ) ) ? 0 : 1 ) ) ) ) )
 </FormulaFrom>
     <pValue>OBCP_Enabled_Reg</pValue>
     <Slope>Varying</Slope>
@@ -4050,6 +4311,37 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>SensorHeight_Reg</pValue>
   </Integer>
+  <Enumeration Name="SensorShutterMode" NameSpace="Standard">
+    <ToolTip>Sets the shutter mode of the type.</ToolTip>
+    <Description>Sets the shutter mode of the type.</Description>
+    <DisplayName>Sensor Shutter Mode</DisplayName>
+    <Visibility>Guru</Visibility>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <EnumEntry Name="Global" NameSpace="Standard">
+      <DisplayName>Global</DisplayName>
+      <pIsImplemented>SensorShutterModeGlobal_Pres</pIsImplemented>
+      <Value>0</Value>
+    </EnumEntry>
+    <EnumEntry Name="Rolling" NameSpace="Standard">
+      <DisplayName>Rolling</DisplayName>
+      <pIsImplemented>SensorShutterModeRolling_Pres</pIsImplemented>
+      <Value>1</Value>
+    </EnumEntry>
+    <EnumEntry Name="GlobalReset" NameSpace="Standard">
+      <DisplayName>Global Reset</DisplayName>
+      <pIsImplemented>SensorShutterModeGlobalReset_Pres</pIsImplemented>
+      <Value>2</Value>
+    </EnumEntry>
+    <pValue>SensorShutterMode_Int</pValue>
+  </Enumeration>
+  <IntConverter Name="SensorShutterMode_Int">
+    <pVariable Name="OLD">SensorShutterMode_Val</pVariable>
+    <pVariable Name="TRIGGER">TriggerModeOnOff_Bit</pVariable>
+    <FormulaTo>( TRIGGER = 0) ? 1 : FROM</FormulaTo>
+    <FormulaFrom>( TRIGGER = 0) ? 1 : OLD</FormulaFrom>
+    <pValue>SensorShutterMode_Val</pValue>
+    <Slope>Varying</Slope>
+  </IntConverter>
   <Integer Name="WidthMax" NameSpace="Standard">
     <ToolTip>Maximum width of the image (in pixels).</ToolTip>
     <Description>Maximum width of the image (in pixels).</Description>
@@ -4292,6 +4584,29 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <pVariable Name="MAX">BinningMaxRows_Reg</pVariable>
     <Formula>MAX + 1</Formula>
   </IntSwissKnife>
+  <Enumeration Name="BinningControl" NameSpace="Custom">
+    <ToolTip>Switchs between average binning and additive binning.</ToolTip>
+    <Description>Switchs between average binning and additive binning.</Description>
+    <DisplayName>Binning Control</DisplayName>
+    <Visibility>Expert</Visibility>
+    <pIsImplemented>BinningControl_Imp</pIsImplemented>
+    <pIsAvailable>BinningControl_Avl</pIsAvailable>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <EnumEntry Name="Additive" NameSpace="Custom">
+      <DisplayName>Additive</DisplayName>
+      <Value>0</Value>
+    </EnumEntry>
+    <EnumEntry Name="Average" NameSpace="Custom">
+      <DisplayName>Average</DisplayName>
+      <Value>1</Value>
+    </EnumEntry>
+    <pValue>BinningControl_Val</pValue>
+  </Enumeration>
+  <IntSwissKnife Name="BinningControl_Avl">
+    <pVariable Name="BIN">BinningRows_Int</pVariable>
+    <pVariable Name="FPGA">FPGABinning_Int</pVariable>
+    <Formula>(( BIN &gt; 1 ) &amp;&amp; ( FPGA &gt; 0 )) ? 1 : 0</Formula>
+  </IntSwissKnife>
   <Integer Name="DecimationHorizontal" NameSpace="Standard">
     <ToolTip>Sets horizontal sub-sampling</ToolTip>
     <Description>Horizontal sub-sampling of the image. This reduces the horizontal resolution (width) of the image by the specified horizontal decimation factor. A value of 1 indicates that the camera performs no horizontal decimation.</Description>
@@ -4352,6 +4667,16 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <pIsLocked>TLParamsLocked</pIsLocked>
     <ImposedAccessMode>RW</ImposedAccessMode>
     <pValue>ReverseXCtrlVal_Reg</pValue>
+  </Boolean>
+  <Boolean Name="ReverseY" NameSpace="Standard">
+    <ToolTip>Flip vertically the image sent by the device.</ToolTip>
+    <Description>Flip vertically the image sent by the device. The Region of interest is applied after the flipping.</Description>
+    <DisplayName>Reverse Y</DisplayName>
+    <Visibility>Expert</Visibility>
+    <pIsImplemented>ReverseYInq_Reg</pIsImplemented>
+    <pIsLocked>TLParamsLocked</pIsLocked>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <pValue>ReverseYCtrlVal_Reg</pValue>
   </Boolean>
   <Enumeration Name="PixelSize" NameSpace="Standard">
     <ToolTip>Size of a pixel in bits.</ToolTip>
@@ -4645,15 +4970,19 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
       <Bit>30</Bit>
       <Sign>Unsigned</Sign>
     </StructEntry>
-    <StructEntry Name="OBCP_Mono12pInq_Bit" NameSpace="Custom">
+    <StructEntry Name="OBCP_Raw12PInq_Bit" NameSpace="Custom">
+      <Bit>19</Bit>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="OBCP_Raw12PackedInq_Bit" NameSpace="Custom">
       <Bit>18</Bit>
       <Sign>Unsigned</Sign>
     </StructEntry>
-    <StructEntry Name="OBCP_Mono16Inq_Bit" NameSpace="Custom">
+    <StructEntry Name="OBCP_Raw16Inq_Bit" NameSpace="Custom">
       <Bit>17</Bit>
       <Sign>Unsigned</Sign>
     </StructEntry>
-    <StructEntry Name="OBCP_Mono8Inq_Bit" NameSpace="Custom">
+    <StructEntry Name="OBCP_Raw8Inq_Bit" NameSpace="Custom">
       <Bit>16</Bit>
       <Sign>Unsigned</Sign>
     </StructEntry>
@@ -5011,9 +5340,56 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
       <AccessMode>RW</AccessMode>
       <Bit>8</Bit>
     </StructEntry>
+    <StructEntry Name="ReverseYCtrlVal_Reg" NameSpace="Custom">
+      <AccessMode>RW</AccessMode>
+      <Bit>9</Bit>
+    </StructEntry>
+    <StructEntry Name="ReverseYInq_Reg">
+      <Bit>29</Bit>
+    </StructEntry>
     <StructEntry Name="ReverseXInq_Reg">
-      <Visibility>Invisible</Visibility>
       <Bit>31</Bit>
+    </StructEntry>
+  </StructReg>
+  <MaskedIntReg Name="BinningControl_Imp" NameSpace="Custom">
+    <Address>0x1048</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <Bit>30</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <MaskedIntReg Name="BinningControl_Val" NameSpace="Custom">
+    <Address>0x1048</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>VideoMode</pInvalidator>
+    <pInvalidator>Binning_Reg</pInvalidator>
+    <Bit>15</Bit>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <StructReg Comment="Aspirin Resize Info Register">
+    <Address>0x1AC8</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>VideoMode</pInvalidator>
+    <pInvalidator>Binning_Reg</pInvalidator>
+    <pInvalidator>Decimation_Reg</pInvalidator>
+    <Endianess>LittleEndian</Endianess>
+    <StructEntry Name="FPGABinning_Int" NameSpace="Custom">
+      <LSB>4</LSB>
+      <MSB>7</MSB>
+    </StructEntry>
+    <StructEntry Name="SensorBinning_Int" NameSpace="Custom">
+      <LSB>0</LSB>
+      <MSB>3</MSB>
     </StructEntry>
   </StructReg>
   <MaskedIntReg Name="ColorFilterId_Reg" NameSpace="Custom">
@@ -5024,6 +5400,7 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <pPort>Device</pPort>
     <pInvalidator>Binning_Reg</pInvalidator>
     <pInvalidator>ReverseXCtrlVal_Reg</pInvalidator>
+    <pInvalidator>ReverseYCtrlVal_Reg</pInvalidator>
     <pInvalidator>CurrentVideoMode_Reg</pInvalidator>
     <LSB>24</LSB>
     <MSB>31</MSB>
@@ -5518,8 +5895,10 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <pFeature>LineDebouncerTimeRaw</pFeature>
     <pFeature>LineStatus</pFeature>
     <pFeature>LineStatusAll</pFeature>
+    <pFeature>ExposureActiveMode</pFeature>
     <pFeature>UserOutputSelector</pFeature>
     <pFeature>UserOutputValue</pFeature>
+    <pFeature>V3_3Enable</pFeature>
   </Category>
   <Enumeration Name="LineSelector" NameSpace="Standard">
     <ToolTip>Selects the physical line (or pin) of the external device connector to configure.</ToolTip>
@@ -5554,10 +5933,8 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <pSelected>LineInverter</pSelected>
     <pSelected>StrobeDelay</pSelected>
     <pSelected>StrobeDuration</pSelected>
-    <pSelected>UserOutputValue</pSelected>
     <pSelected>LineDebouncerTimeRaw</pSelected>
     <pSelected>LineStatus</pSelected>
-    <pSelected>LineStatusAll</pSelected>
   </Enumeration>
   <Integer Name="LineSelected_Int">
     <Value>0</Value>
@@ -5591,6 +5968,11 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
     <pVariable Name="INDEX">UserOutputSelector_Int</pVariable>
     <Formula>BASE + 0x1110 + ( INDEX * 0x10 )</Formula>
   </IntSwissKnife>
+  <IntSwissKnife Name="UserOutputStrobeCntCtrlAddress">
+    <pVariable Name="BASE">StrobeRegBaseAddress</pVariable>
+    <pVariable Name="INDEX">UserOutputSelector_Int</pVariable>
+    <Formula>BASE + 0x300 + ( INDEX * 4 )</Formula>
+  </IntSwissKnife>
   <Enumeration Name="LineMode" NameSpace="Standard">
     <ToolTip>Controls whether the physical Line is used to Input or Output a signal.</ToolTip>
     <Description>Controls whether the physical Line is used to Input or Output a signal.</Description>
@@ -5611,14 +5993,6 @@ FROM=0 ? ( ( OLD | 0x40000000 ) & 0xFEFFFFFF ) :
       <Value>1</Value>
     </EnumEntry>
     <pValue>LineMode_Int</pValue>
-    <pSelected>LineSource</pSelected>
-    <pSelected>LineInverter</pSelected>
-    <pSelected>StrobeDelay</pSelected>
-    <pSelected>StrobeDuration</pSelected>
-    <pSelected>UserOutputValue</pSelected>
-    <pSelected>LineDebouncerTimeRaw</pSelected>
-    <pSelected>LineStatus</pSelected>
-    <pSelected>LineStatusAll</pSelected>
   </Enumeration>
   <IntConverter Name="LineMode_Int">
     <pVariable Name="OLD">GPIOCtrlPin_Reg</pVariable>
@@ -5658,12 +6032,22 @@ INDEX = 0 ? INQ0 :
 ( INDEX = 2 ? INQ2 : INQ3 ) )
 </Formula>
   </IntSwissKnife>
+  <Boolean Name="V3_3Enable" NameSpace="Custom">
+    <ToolTip>Internally generated 3.3V rail.</ToolTip>
+    <Description>Internally generated 3.3V rail.</Description>
+    <DisplayName>3.3V Enable</DisplayName>
+    <Visibility>Guru</Visibility>
+    <pIsImplemented>V3_3Enable_Imp</pIsImplemented>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <pValue>V3_3Enable_Val</pValue>
+  </Boolean>
   <Enumeration Name="LineSource" NameSpace="Standard">
     <ToolTip>Selects which internal acquisition or I/O source signal to output on the selected line.</ToolTip>
     <Description>Selects which internal acquisition or I/O source signal to output on the selected line.</Description>
     <DisplayName>Line Source</DisplayName>
     <Visibility>Expert</Visibility>
     <pIsImplemented>GPIOPinPresInq_Bit</pIsImplemented>
+    <pIsAvailable>LineSourceAvailable_Int</pIsAvailable>
     <ImposedAccessMode>RW</ImposedAccessMode>
     <EnumEntry Name="ExposureActive" NameSpace="Standard">
       <pIsAvailable>LineSourceExposureActive_Int</pIsAvailable>
@@ -5686,12 +6070,6 @@ INDEX = 0 ? INQ0 :
       <Value>4</Value>
     </EnumEntry>
     <pValue>LineSource_Int</pValue>
-    <pSelected>LineInverter</pSelected>
-    <pSelected>StrobeDelay</pSelected>
-    <pSelected>StrobeDuration</pSelected>
-    <pSelected>LineStatus</pSelected>
-    <pSelected>LineStatusAll</pSelected>
-    <pSelected>UserOutputValue</pSelected>
   </Enumeration>
   <IntConverter Name="LineSource_Int">
     <pVariable Name="OLD">StrobeLinePolarity_Reg</pVariable>
@@ -5700,7 +6078,7 @@ INDEX = 0 ? INQ0 :
     <pVariable Name="STROBE">StrobeLineOnOff_Bit</pVariable>
     <pVariable Name="STROBE_START">GPIOXtra_Reg</pVariable>
     <FormulaTo> FROM = 0 ? ( OLD &amp; 0xBFE0FFFF | 0x180000 ) : 
-(FROM = 1 ? ( OLD &amp; 0xBFE0FFFF | 0x40180000 ) : ( OLD &amp; 0xFFE0FFFF |  ( 1 &lt;&lt; 16 )))
+(FROM = 1 ? ( OLD &amp; 0xBFE0FFFF | 0x40180000 ) : ( OLD &amp; 0xFFE0FFFF |  ( 1 &lt;&lt; 19 )))
 </FormulaTo>
     <FormulaFrom>( STROBE = 0 ) ? ( INDEX+1 ) : ( ( ( STROBE_START &amp; 0x80000000 ) ) ? 1 : 0 )</FormulaFrom>
     <pValue>StrobeLinePolarity_Reg</pValue>
@@ -5734,7 +6112,7 @@ INDEX = 0 ? INQ0 :
     <Formula>( ( ( MODE = 1 ) || ( MODE = 8 ) ) &amp;&amp; ( INDEX = 3 ) ) ? 1 : 0</Formula>
   </IntSwissKnife>
   <Boolean Name="LineInverter" NameSpace="Standard">
-    <ToolTip>Controls the inversion of the signal of the selected or output line.</ToolTip>
+    <ToolTip>Controls the inversion of the signal of the selected input or output line.</ToolTip>
     <Description>Controls the inversion of the signal of the selected input or output line.</Description>
     <DisplayName>Line Inverter</DisplayName>
     <Visibility>Expert</Visibility>
@@ -5813,12 +6191,11 @@ INDEX = 0 ? INQ0 :
     <pValue>LineDebouncerTimeRaw_CtrlValue</pValue>
     <pMin>LineDebouncerTimeRaw_MinValue</pMin>
     <pMax>LineDebouncerTimeRaw_MaxValue</pMax>
-    <Representation>Logarithmic</Representation>
+    <Representation>Linear</Representation>
   </Integer>
   <IntSwissKnife Name="LineDebouncerTimeRaw_InqPresence">
-    <pVariable Name="SEL">LineSelected_Int</pVariable>
     <pVariable Name="TO">LineDebouncerTimeRaw_Ctrl_Reg</pVariable>
-    <Formula>((TO &amp; 0x80000000) ? ((TO &amp; (0x40000000 &gt;&gt; SEL)) ? 1 : 0) : 0)</Formula>
+    <Formula>((TO &amp; 0x80000000) ? 1 : 0)</Formula>
   </IntSwissKnife>
   <IntSwissKnife Name="LineDebouncerTimeRaw_MinValue">
     <pVariable Name="TO">LineDebouncerTimeRaw_Ctrl_Reg</pVariable>
@@ -5829,9 +6206,15 @@ INDEX = 0 ? INQ0 :
     <Formula>( TO &amp; 0x000fffff)</Formula>
   </IntSwissKnife>
   <IntSwissKnife Name="LineDebouncerTimeRaw_InqAvailable">
+    <pVariable Name="SEL">LineSelected_Int</pVariable>
+    <pVariable Name="CTRL">LineDebouncerTimeRaw_Ctrl_Reg</pVariable>
     <pVariable Name="TO">LineDebouncerTimeRaw_LineSelect_Reg</pVariable>
     <pVariable Name="MODE">GPIOPinMode_Reg</pVariable>
-    <Formula>((( MODE = 0 ) || ( MODE = 2 )) &amp;&amp; ( TO &amp; 0x80000000) ) ? 1 : 0</Formula>
+    <Formula>
+( ( ( MODE = 0 ) || ( MODE = 2 ) ) &amp;&amp;
+( CTRL &amp; (0x40000000 &gt;&gt; SEL) ) &amp;&amp;
+( TO &amp; 0x80000000 ) ) ? 1 : 0
+</Formula>
   </IntSwissKnife>
   <IntConverter Name="LineDebouncerTimeRaw_CtrlValue">
     <pVariable Name="OLD">LineDebouncerTimeRaw_LineSelect_Reg</pVariable>
@@ -5869,6 +6252,27 @@ INDEX = 0 ? INQ0 :
     <pValue>GPIOPinVal_Reg</pValue>
     <Representation>HexNumber</Representation>
   </Integer>
+  <Enumeration Name="ExposureActiveMode" NameSpace="Custom">
+    <ToolTip>Control sensor active exposure type.</ToolTip>
+    <Description>Control sensor active exposure type.</Description>
+    <DisplayName>Exposure Active Mode</DisplayName>
+    <Visibility>Expert</Visibility>
+    <pIsImplemented>Exposure_Active_Line1_Pres</pIsImplemented>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <EnumEntry Name="Line1" NameSpace="Custom">
+      <pIsImplemented>Exposure_Active_Line1_Pres</pIsImplemented>
+      <Value>0</Value>
+    </EnumEntry>
+    <EnumEntry Name="AnyPixels" NameSpace="Custom">
+      <pIsImplemented>Exposure_Active_AnyPixel_Pres</pIsImplemented>
+      <Value>1</Value>
+    </EnumEntry>
+    <EnumEntry Name="AllPixels" NameSpace="Custom">
+      <pIsImplemented>Exposure_Active_AllPixel_Pres</pIsImplemented>
+      <Value>2</Value>
+    </EnumEntry>
+    <pValue>ExposureActiveMode_Int</pValue>
+  </Enumeration>
   <Enumeration Name="UserOutputSelector" NameSpace="Standard">
     <ToolTip>Selects the physical line (or pin) of the external device connector to configure.</ToolTip>
     <Description>Selects the physical line (or pin) of the external device connector to configure.</Description>
@@ -5892,6 +6296,7 @@ INDEX = 0 ? INQ0 :
       <Value>3</Value>
     </EnumEntry>
     <pValue>UserOutputSelector_Int</pValue>
+    <pSelected>UserOutputValue</pSelected>
   </Enumeration>
   <Integer Name="UserOutputSelector_Int">
     <Value>1</Value>
@@ -5908,7 +6313,8 @@ INDEX = 0 ? INQ0 :
   </Boolean>
   <IntSwissKnife Name="UserOutputValueAvailable_Int">
     <pVariable Name="MODE">UserOutputPinMode_Reg</pVariable>
-    <Formula>( MODE = 1 ) ? 1 : 0</Formula>
+    <pVariable Name="STROBE">UserOutputStrobeOnOff_Bit</pVariable>
+    <Formula>( ( ( MODE = 8 ) || ( MODE = 1 ) )  &amp;&amp; ( STROBE = 0 ) ) ? 1 : 0</Formula>
   </IntSwissKnife>
   <IntConverter Name="UserOutputValue_Int">
     <pVariable Name="OLD">UserOutput_Reg</pVariable>
@@ -6031,6 +6437,27 @@ INDEX = 0 ? INQ0 :
       <Bit>28</Bit>
     </StructEntry>
   </StructReg>
+  <MaskedIntReg Name="V3_3Enable_Imp" NameSpace="Custom">
+    <Address>0x19D0</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <Bit>31</Bit>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <MaskedIntReg Name="V3_3Enable_Val" NameSpace="Custom">
+    <Address>0x19D0</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <Bit>0</Bit>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
   <IntReg Name="StrobeLinePolarity_Reg">
     <pAddress>StrobeLineCntCtrlAddress</pAddress>
     <Length>4</Length>
@@ -6039,6 +6466,7 @@ INDEX = 0 ? INQ0 :
     <pInvalidator>LineSelector</pInvalidator>
     <pInvalidator>GPIOCtrlPin_Reg</pInvalidator>
     <pInvalidator>GPIOXtra_Reg</pInvalidator>
+    <pInvalidator>TriggerModeOnOff_Bit</pInvalidator>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
@@ -6053,6 +6481,46 @@ INDEX = 0 ? INQ0 :
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
+  <StructReg Comment="Exposure Active Mode Register">
+    <Address>0x5530</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>TriggerModeOnOff_Bit</pInvalidator>
+    <pInvalidator>LineMode_Int</pInvalidator>
+    <pInvalidator>SensorShutterMode_Int</pInvalidator>
+    <Endianess>LittleEndian</Endianess>
+    <StructEntry Name="Exposure_Active_Line1_Pres" NameSpace="Custom">
+      <LSB>31</LSB>
+      <MSB>31</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="Exposure_Active_AnyPixel_Pres" NameSpace="Custom">
+      <LSB>30</LSB>
+      <MSB>30</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="Exposure_Active_AllPixel_Pres" NameSpace="Custom">
+      <LSB>29</LSB>
+      <MSB>29</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+  </StructReg>
+  <MaskedIntReg Name="ExposureActiveMode_Int">
+    <Address>0x1104</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <Cachable>NoCache</Cachable>
+    <pInvalidator>SensorShutterMode_Int</pInvalidator>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <LSB>16</LSB>
+    <MSB>17</MSB>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
   <MaskedIntReg Name="GPIOPinMode_Reg">
     <pAddress>GPIOCtrlPinRegBaseAddress</pAddress>
     <Length>4</Length>
@@ -6153,6 +6621,8 @@ INDEX = 0 ? INQ0 :
     <AccessMode>RW</AccessMode>
     <pPort>Device</pPort>
     <pInvalidator>LineSelector</pInvalidator>
+    <pInvalidator>GPIOCtrlPin_Reg</pInvalidator>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
@@ -6179,6 +6649,7 @@ INDEX = 0 ? INQ0 :
     <pPort>Device</pPort>
     <Cachable>NoCache</Cachable>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>LineSource</pInvalidator>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
@@ -6191,6 +6662,20 @@ INDEX = 0 ? INQ0 :
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <LSB>16</LSB>
     <MSB>19</MSB>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </MaskedIntReg>
+  <MaskedIntReg Name="UserOutputStrobeOnOff_Bit">
+    <pAddress>UserOutputStrobeCntCtrlAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserOutputSelector_Int</pInvalidator>
+    <pInvalidator>GPIOCtrlPin_Reg</pInvalidator>
+    <pInvalidator>GPIOXtra_Reg</pInvalidator>
+    <pInvalidator>StrobeLinePolarity_Reg</pInvalidator>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <Bit>20</Bit>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </MaskedIntReg>
@@ -6334,7 +6819,7 @@ INDEX = 0 ? INQ0 :
     <DisplayName>LUT Value All</DisplayName>
     <Visibility>Guru</Visibility>
     <pIsImplemented>LUTCtrl_InqPresence_Bit</pIsImplemented>
-    <pIsAvailable>LUTEnable_CtrlValue</pIsAvailable>
+    <pIsAvailable>LUTValue_Avl</pIsAvailable>
     <Streamable>Yes</Streamable>
     <pAddress>LUTRegChannelBaseAddress</pAddress>
     <pLength>LUTValueAll_InqLen</pLength>
@@ -6363,6 +6848,38 @@ INDEX = 0 ? INQ0 :
     <pVariable Name="INDEX">LUTIndex_CtrlValue</pVariable>
     <Formula>BASE + ( INDEX * 4 )</Formula>
   </IntSwissKnife>
+  <StructReg Comment="LUT Inquiry Register">
+    <Address>0x000</Address>
+    <pAddress>LUTRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>PixelFormat</pInvalidator>
+    <pInvalidator>OBCP_Enabled_Reg</pInvalidator>
+    <Endianess>LittleEndian</Endianess>
+    <StructEntry Name="LUTCtrl_InqAvailable_Bit" NameSpace="Custom">
+      <Bit>31</Bit>
+    </StructEntry>
+    <StructEntry Name="LUTCtrl_OnOffAvailable_Bit" NameSpace="Custom">
+      <Bit>26</Bit>
+    </StructEntry>
+    <StructEntry Name="LUT_InputDataBitDepth_Reg" NameSpace="Custom">
+      <LSB>19</LSB>
+      <MSB>23</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="LUT_OutputDataBitDepth_Reg" NameSpace="Custom">
+      <LSB>14</LSB>
+      <MSB>18</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="LUT_ChannelNumber_Reg" NameSpace="Custom">
+      <LSB>8</LSB>
+      <MSB>12</MSB>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+  </StructReg>
   <MaskedIntReg Name="LUTCtrl_InqPresence_Bit" NameSpace="Custom">
     <Address>0x40C</Address>
     <pAddress>CamRegBaseAddress</pAddress>
@@ -6371,29 +6888,6 @@ INDEX = 0 ? INQ0 :
     <pPort>Device</pPort>
     <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <Bit>27</Bit>
-    <Sign>Unsigned</Sign>
-    <Endianess>LittleEndian</Endianess>
-  </MaskedIntReg>
-  <MaskedIntReg Name="LUTCtrl_InqAvailable_Bit" NameSpace="Custom">
-    <Address>0x000</Address>
-    <pAddress>LUTRegBaseAddress</pAddress>
-    <Length>4</Length>
-    <AccessMode>RO</AccessMode>
-    <pPort>Device</pPort>
-    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
-    <Bit>31</Bit>
-    <Sign>Unsigned</Sign>
-    <Endianess>LittleEndian</Endianess>
-  </MaskedIntReg>
-  <MaskedIntReg Name="LUT_ChannelNumber_Reg" NameSpace="Custom">
-    <Address>0x000</Address>
-    <pAddress>LUTRegBaseAddress</pAddress>
-    <Length>4</Length>
-    <AccessMode>RO</AccessMode>
-    <pPort>Device</pPort>
-    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
-    <LSB>8</LSB>
-    <MSB>12</MSB>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </MaskedIntReg>
@@ -6417,17 +6911,6 @@ INDEX = 0 ? INQ0 :
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </MaskedIntReg>
-  <MaskedIntReg Name="LUTCtrl_OnOffAvailable_Bit" NameSpace="Custom">
-    <Address>0x000</Address>
-    <pAddress>LUTRegBaseAddress</pAddress>
-    <Length>4</Length>
-    <AccessMode>RO</AccessMode>
-    <pPort>Device</pPort>
-    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
-    <Bit>26</Bit>
-    <Sign>Unsigned</Sign>
-    <Endianess>LittleEndian</Endianess>
-  </MaskedIntReg>
   <IntReg Name="LUTEnableCtrl_Reg">
     <Address>0x008</Address>
     <pAddress>LUTRegBaseAddress</pAddress>
@@ -6438,30 +6921,6 @@ INDEX = 0 ? INQ0 :
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
-  <MaskedIntReg Name="LUT_InputDataBitDepth_Reg" NameSpace="Custom">
-    <Address>0x000</Address>
-    <pAddress>LUTRegBaseAddress</pAddress>
-    <Length>4</Length>
-    <AccessMode>RO</AccessMode>
-    <pPort>Device</pPort>
-    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
-    <LSB>19</LSB>
-    <MSB>23</MSB>
-    <Sign>Unsigned</Sign>
-    <Endianess>LittleEndian</Endianess>
-  </MaskedIntReg>
-  <MaskedIntReg Name="LUT_OutputDataBitDepth_Reg" NameSpace="Custom">
-    <Address>0x000</Address>
-    <pAddress>LUTRegBaseAddress</pAddress>
-    <Length>4</Length>
-    <AccessMode>RO</AccessMode>
-    <pPort>Device</pPort>
-    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
-    <LSB>14</LSB>
-    <MSB>18</MSB>
-    <Sign>Unsigned</Sign>
-    <Endianess>LittleEndian</Endianess>
-  </MaskedIntReg>
   <IntReg Name="LUTBankOffset_Reg">
     <Address>0x00C</Address>
     <pAddress>LUTRegBaseAddress</pAddress>
@@ -6472,30 +6931,30 @@ INDEX = 0 ? INQ0 :
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
-  <IntSwissKnife Name="PixrlFormat_LUT_Enable">
-    <pVariable Name="COLOR_ID">ColorCodingID_Reg</pVariable>
-    <Formula>( ( COLOR_ID = 0 ) || ( COLOR_ID = 1 ) || ( COLOR_ID = 2 ) || ( COLOR_ID = 3 ) ||
-( COLOR_ID = 4 ) || ( COLOR_ID = 9 ) ) ? 1 : 0</Formula>
+  <IntSwissKnife Name="PixelFormat_LUT_Enable">
+    <pVariable Name="ID">ColorCodingID_Reg</pVariable>
+    <Formula>( ( ID = 0 ) || ( ID = 1 ) || ( ID = 2 ) ||
+( ID = 3 ) || ( ID = 4 ) || ( ID = 9 ) ) ? 1 : 0</Formula>
   </IntSwissKnife>
   <IntSwissKnife Name="LUTSelector_Avl">
-    <pVariable Name="FORMAT_ALLOWED">PixrlFormat_LUT_Enable</pVariable>
-    <pVariable Name="LUTCTRL_AVL_BIT">LUTCtrl_InqAvailable_Bit</pVariable>
-    <Formula>( FORMAT_ALLOWED = 1 ) &amp;&amp; ( LUTCTRL_AVL_BIT = 1 )</Formula>
+    <pVariable Name="FMT">PixelFormat_LUT_Enable</pVariable>
+    <pVariable Name="AVL">LUTCtrl_InqAvailable_Bit</pVariable>
+    <Formula>FMT &amp;&amp; AVL</Formula>
   </IntSwissKnife>
   <IntSwissKnife Name="LUTEnable_Avl">
-    <pVariable Name="FORMAT_ALLOWED">PixrlFormat_LUT_Enable</pVariable>
-    <pVariable Name="LUTENABLE_AVL_BIT">LUTCtrl_OnOffAvailable_Bit</pVariable>
-    <Formula>( FORMAT_ALLOWED = 1) &amp;&amp; ( LUTENABLE_AVL_BIT = 1 )</Formula>
+    <pVariable Name="FMT">PixelFormat_LUT_Enable</pVariable>
+    <pVariable Name="AVL">LUTCtrl_OnOffAvailable_Bit</pVariable>
+    <Formula>FMT &amp;&amp; AVL</Formula>
   </IntSwissKnife>
   <IntSwissKnife Name="LUTIndex_Avl">
-    <pVariable Name="FORMAT_ALLOWED">PixrlFormat_LUT_Enable</pVariable>
-    <pVariable Name="LUTENABLED">LUTEnable_CtrlValue</pVariable>
-    <Formula>( FORMAT_ALLOWED = 1) &amp;&amp; ( LUTENABLED = 1 )</Formula>
+    <pVariable Name="FMT">PixelFormat_LUT_Enable</pVariable>
+    <pVariable Name="EN">LUTEnable_CtrlValue</pVariable>
+    <Formula>FMT &amp;&amp; EN</Formula>
   </IntSwissKnife>
   <IntSwissKnife Name="LUTValue_Avl">
-    <pVariable Name="FORMAT_ALLOWED">PixrlFormat_LUT_Enable</pVariable>
-    <pVariable Name="LUTENABLED">LUTEnable_CtrlValue</pVariable>
-    <Formula>( FORMAT_ALLOWED = 1) &amp;&amp; ( LUTENABLED = 1 )</Formula>
+    <pVariable Name="FMT">PixelFormat_LUT_Enable</pVariable>
+    <pVariable Name="EN">LUTEnable_CtrlValue</pVariable>
+    <Formula>FMT &amp;&amp; EN</Formula>
   </IntSwissKnife>
   <Category Name="TransportLayerControl" NameSpace="Standard">
     <ToolTip>Category that contains the transport layer control features.</ToolTip>
@@ -6964,6 +7423,7 @@ INDEX = 0 ? INQ0 :
     <pFeature>ChunkPixelFormat</pFeature>
     <pFeature>ChunkPixelDynamicRangeMin</pFeature>
     <pFeature>ChunkPixelDynamicRangeMax</pFeature>
+    <pFeature>ChunkTransmitFrameCount</pFeature>
     <pFeature>ChunkTimestamp</pFeature>
   </Category>
   <Boolean Name="ChunkModeActive" NameSpace="Standard">
@@ -7048,10 +7508,15 @@ INDEX = 0 ? INQ0 :
       <pIsImplemented>ChunkPixRangeMaxImplemented_Int</pIsImplemented>
       <Value>12</Value>
     </EnumEntry>
+    <EnumEntry Name="TransmitFrameCount" NameSpace="Custom">
+      <DisplayName>Transmit Frame Count</DisplayName>
+      <pIsImplemented>ChunkTransmitFrameCountImplemented_Int</pIsImplemented>
+      <Value>13</Value>
+    </EnumEntry>
     <EnumEntry Name="Timestamp" NameSpace="Standard">
       <DisplayName>Image Timestamp</DisplayName>
       <pIsImplemented>ChunkTimestampImplemented_Int</pIsImplemented>
-      <Value>13</Value>
+      <Value>14</Value>
     </EnumEntry>
     <pValue>ChunkSelector_Reg</pValue>
     <pSelected>ChunkEnable</pSelected>
@@ -7300,6 +7765,15 @@ INDEX = 0 ? INQ0 :
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>ChunkPixelDynamicRangeMax_Reg</pValue>
   </Integer>
+  <Integer Name="ChunkTransmitFrameCount" NameSpace="Custom">
+    <ToolTip>Returns the number of images transmitted from the camera.</ToolTip>
+    <Description>Returns the number of images transmitted from the camera.</Description>
+    <DisplayName>Transmit Frame Count</DisplayName>
+    <Visibility>Expert</Visibility>
+    <pIsImplemented>ChunkTransmitFrameCountImplemented_Int</pIsImplemented>
+    <ImposedAccessMode>RO</ImposedAccessMode>
+    <pValue>ChunkTransmitFrameCount_Reg</pValue>
+  </Integer>
   <Integer Name="ChunkTimestamp" NameSpace="Standard">
     <ToolTip>Returns the Timestamp of the image.</ToolTip>
     <Description>Returns the Timestamp of the image.</Description>
@@ -7449,6 +7923,17 @@ INDEX = 0 ? INQ0 :
   <Port Name="PixelDynamicRangeMaxPort">
     <ChunkID>0504000D</ChunkID>
   </Port>
+  <IntReg Name="ChunkTransmitFrameCount_Reg">
+    <Address>0x00</Address>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>TransmitFrameCountPort</pPort>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </IntReg>
+  <Port Name="TransmitFrameCountPort">
+    <ChunkID>0504000E</ChunkID>
+  </Port>
   <IntReg Name="Timestamp_Reg">
     <Address>0x00</Address>
     <Length>8</Length>
@@ -7458,7 +7943,7 @@ INDEX = 0 ? INQ0 :
     <Endianess>LittleEndian</Endianess>
   </IntReg>
   <Port Name="TimestampPort">
-    <ChunkID>0508000E</ChunkID>
+    <ChunkID>0508000F</ChunkID>
   </Port>
   <IntReg Name="ChunkModeActive_Reg">
     <Address>0x5400</Address>
@@ -7466,6 +7951,7 @@ INDEX = 0 ? INQ0 :
     <Length>4</Length>
     <AccessMode>RW</AccessMode>
     <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <pInvalidator>PayloadSizeVal_Reg</pInvalidator>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
@@ -7476,6 +7962,7 @@ INDEX = 0 ? INQ0 :
     <Length>4</Length>
     <AccessMode>RW</AccessMode>
     <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <pInvalidator>ChunkEnable</pInvalidator>
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
@@ -7486,6 +7973,7 @@ INDEX = 0 ? INQ0 :
     <Length>4</Length>
     <AccessMode>RW</AccessMode>
     <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
     <pInvalidator>ChunkSelector_Reg</pInvalidator>
     <pInvalidator>PayloadSizeVal_Reg</pInvalidator>
     <Sign>Unsigned</Sign>
@@ -7559,8 +8047,12 @@ INDEX = 0 ? INQ0 :
       <Bit>19</Bit>
       <Sign>Unsigned</Sign>
     </StructEntry>
-    <StructEntry Name="ChunkTimestampImplemented_Int" NameSpace="Custom">
+    <StructEntry Name="ChunkTransmitFrameCountImplemented_Int" NameSpace="Custom">
       <Bit>18</Bit>
+      <Sign>Unsigned</Sign>
+    </StructEntry>
+    <StructEntry Name="ChunkTimestampImplemented_Int" NameSpace="Custom">
+      <Bit>17</Bit>
       <Sign>Unsigned</Sign>
     </StructEntry>
   </StructReg>
@@ -7617,14 +8109,22 @@ INDEX = 0 ? INQ0 :
     <ImposedAccessMode>RW</ImposedAccessMode>
     <EnumEntry Name="AcquisitionStart" NameSpace="Standard">
       <DisplayName>Acquisition Start</DisplayName>
+      <pIsImplemented>EventAcquisitionStartInq_Bit</pIsImplemented>
       <Value>40000</Value>
     </EnumEntry>
     <EnumEntry Name="AcquisitionEnd" NameSpace="Standard">
       <DisplayName>Acquisition End</DisplayName>
+      <pIsImplemented>EventAcquisitionEndInq_Bit</pIsImplemented>
       <Value>40001</Value>
+    </EnumEntry>
+    <EnumEntry Name="ExposureStart" NameSpace="Standard">
+      <DisplayName>Exposure Start</DisplayName>
+      <pIsImplemented>EventExposureStartInq_Bit</pIsImplemented>
+      <Value>40002</Value>
     </EnumEntry>
     <EnumEntry Name="ExposureEnd" NameSpace="Standard">
       <DisplayName>Exposure End</DisplayName>
+      <pIsImplemented>EventExposureEndInq_Bit</pIsImplemented>
       <Value>40003</Value>
     </EnumEntry>
     <pValue>EventSelector_Reg</pValue>
@@ -7657,7 +8157,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the unique identifier of the AcquisitionStart type of Event.</Description>
     <DisplayName>Event Acquisition Start</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsImplemented>EventControl_Inq</pIsImplemented>
+    <pIsImplemented>EventAcquisitionStartInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventAcquisitionStart_Reg</pValue>
   </Integer>
@@ -7666,7 +8166,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the Timestamp of the AcquisitionStart Event.</Description>
     <DisplayName>Event Acquisition Start Timestamp</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsImplemented>EventControl_Inq</pIsImplemented>
+    <pIsImplemented>EventAcquisitionStartInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventAcquisitionStartTimestamp_Reg</pValue>
   </Integer>
@@ -7675,7 +8175,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the unique Identifier of the Frame (or image) that generated the AcquisitionStart Event.</Description>
     <DisplayName>Event Acquisition Start Frame ID</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsImplemented>EventControl_Inq</pIsImplemented>
+    <pIsImplemented>EventAcquisitionStartInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventAcquisitionStartFrameID_Reg</pValue>
   </Integer>
@@ -7684,7 +8184,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the unique identifier of the AcquisitionEnd type of Event.</Description>
     <DisplayName>Event Acquisition End</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsImplemented>EventControl_Inq</pIsImplemented>
+    <pIsImplemented>EventAcquisitionEndInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventAcquisitionEnd_Reg</pValue>
   </Integer>
@@ -7693,7 +8193,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the Timestamp of the AcquisitionEnd Event.</Description>
     <DisplayName>Event Acquisition End Timestamp</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsImplemented>EventControl_Inq</pIsImplemented>
+    <pIsImplemented>EventAcquisitionEndInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventAcquisitionEndTimestamp_Reg</pValue>
   </Integer>
@@ -7702,7 +8202,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the unique Identifier of the Frame (or image) that generated the AcquisitionEnd Event.</Description>
     <DisplayName>Event Acquisition End Frame ID</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsImplemented>EventControl_Inq</pIsImplemented>
+    <pIsImplemented>EventAcquisitionEndInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventAcquisitionEndFrameID_Reg</pValue>
   </Integer>
@@ -7717,7 +8217,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the unique identifier of the ExposureStart type of Event.</Description>
     <DisplayName>Event Exposure Start</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsImplemented>EventControl_Inq</pIsImplemented>
+    <pIsImplemented>EventExposureStartInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventExposureStart_Reg</pValue>
   </Integer>
@@ -7726,6 +8226,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the Timestamp of the ExposureStart Event.</Description>
     <DisplayName>Event Exposure Start Timestamp</DisplayName>
     <Visibility>Expert</Visibility>
+    <pIsImplemented>EventExposureStartInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventExposureStartTimestamp_Reg</pValue>
   </Integer>
@@ -7734,6 +8235,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the unique Identifier of the Frame (or image) that generated the ExposureStart Event.</Description>
     <DisplayName>Event Exposure Start Frame ID</DisplayName>
     <Visibility>Expert</Visibility>
+    <pIsImplemented>EventExposureStartInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventExposureStartFrameID_Reg</pValue>
   </Integer>
@@ -7742,7 +8244,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the unique identifier of the ExposureEnd type of Event.</Description>
     <DisplayName>Event Exposure End</DisplayName>
     <Visibility>Expert</Visibility>
-    <pIsImplemented>EventControl_Inq</pIsImplemented>
+    <pIsImplemented>EventExposureEndInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventExposureEnd_Reg</pValue>
   </Integer>
@@ -7751,6 +8253,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the Timestamp of the ExposureEnd Event.</Description>
     <DisplayName>Event Exposure End Timestamp</DisplayName>
     <Visibility>Expert</Visibility>
+    <pIsImplemented>EventExposureEndInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventExposureEndTimestamp_Reg</pValue>
   </Integer>
@@ -7759,6 +8262,7 @@ INDEX = 0 ? INQ0 :
     <Description>Returns the unique Identifier of the Frame (or image) that generated the ExposureEnd Event.</Description>
     <DisplayName>Event Exposure End Frame ID</DisplayName>
     <Visibility>Expert</Visibility>
+    <pIsImplemented>EventExposureEndInq_Bit</pIsImplemented>
     <ImposedAccessMode>RO</ImposedAccessMode>
     <pValue>EventExposureEndFrameID_Reg</pValue>
   </Integer>
@@ -7791,6 +8295,27 @@ INDEX = 0 ? INQ0 :
     <Sign>Unsigned</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
+  <StructReg Comment="Event Inquiry Register">
+    <Address>0x4518</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RO</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>EventSelector_Reg</pInvalidator>
+    <Endianess>LittleEndian</Endianess>
+    <StructEntry Name="EventExposureEndInq_Bit" NameSpace="Custom">
+      <Bit>3</Bit>
+    </StructEntry>
+    <StructEntry Name="EventExposureStartInq_Bit" NameSpace="Custom">
+      <Bit>2</Bit>
+    </StructEntry>
+    <StructEntry Name="EventAcquisitionEndInq_Bit" NameSpace="Custom">
+      <Bit>1</Bit>
+    </StructEntry>
+    <StructEntry Name="EventAcquisitionStartInq_Bit" NameSpace="Custom">
+      <Bit>0</Bit>
+    </StructEntry>
+  </StructReg>
   <IntReg Name="EventAcquisitionStart_Reg" NameSpace="Custom">
     <Address>0x2</Address>
     <Length>2</Length>
@@ -7969,6 +8494,137 @@ INDEX = 0 ? INQ0 :
     <AccessMode>RO</AccessMode>
     <pPort>TestEventPort</pPort>
     <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </IntReg>
+  <Category Name="RemoveParameterLimits" NameSpace="Custom">
+    <ToolTip>Category that removes parameter limits.</ToolTip>
+    <Description>Category that removes parameter limits.</Description>
+    <DisplayName>Remove Parameter Limits</DisplayName>
+    <Visibility>Expert</Visibility>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <pFeature>ParameterSelector</pFeature>
+    <pFeature>RemoveLimits</pFeature>
+  </Category>
+  <Enumeration Name="ParameterSelector" NameSpace="Custom">
+    <ToolTip>Selects which parameter whose limit will be removed.</ToolTip>
+    <Description>Selects which parameter whose limit will be removed.</Description>
+    <DisplayName>Parameter Selector</DisplayName>
+    <Visibility>Expert</Visibility>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <EnumEntry Name="Gain" NameSpace="Custom">
+      <DisplayName>Gain</DisplayName>
+      <Value>0</Value>
+    </EnumEntry>
+    <pValue>ParameterSelector_Reg</pValue>
+    <pSelected>RemoveLimits</pSelected>
+  </Enumeration>
+  <Boolean Name="RemoveLimits" NameSpace="Custom">
+    <ToolTip>Specifies whether or not the parameter limit is removed.</ToolTip>
+    <Description>Specifies whether or not the parameter limit is removed.</Description>
+    <DisplayName>Remove Limits</DisplayName>
+    <Visibility>Expert</Visibility>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <pValue>RemoveLimits_Int</pValue>
+  </Boolean>
+  <IntConverter Name="RemoveLimits_Int">
+    <pVariable Name="SEL">ParameterSelector_Reg</pVariable>
+    <FormulaTo>FROM</FormulaTo>
+    <FormulaFrom>( ( TO &amp; ( 1 &lt;&lt; SEL) ) = 0 ) ? 0 : 1</FormulaFrom>
+    <pValue>RemoveLimits_Reg</pValue>
+    <Slope>Varying</Slope>
+  </IntConverter>
+  <IntReg Name="ParameterSelector_Reg" NameSpace="Custom">
+    <Address>0x5420</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </IntReg>
+  <IntReg Name="RemoveLimits_Reg" NameSpace="Custom">
+    <Address>0x5424</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserSetLoad_CtrlValueReg</pInvalidator>
+    <pInvalidator>ParameterSelector_Reg</pInvalidator>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </IntReg>
+  <Category Name="UserDefinedValues" NameSpace="Custom">
+    <ToolTip>Category that contains user defined values.</ToolTip>
+    <Description>Category that contains user defined values.</Description>
+    <DisplayName>User Defined Values</DisplayName>
+    <Visibility>Guru</Visibility>
+    <ImposedAccessMode>RO</ImposedAccessMode>
+    <pFeature>UserDefinedValueSelector</pFeature>
+    <pFeature>UserDefinedValue</pFeature>
+  </Category>
+  <Enumeration Name="UserDefinedValueSelector" NameSpace="Custom">
+    <ToolTip>Used to select from a set of user defined values</ToolTip>
+    <Description>Used to select from a set of user defined values</Description>
+    <DisplayName>User Defined Value Selector</DisplayName>
+    <Visibility>Guru</Visibility>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <EnumEntry Name="Value1" NameSpace="Custom">
+      <Description>User defined value1.</Description>
+      <DisplayName>Value 1</DisplayName>
+      <Value>0</Value>
+    </EnumEntry>
+    <EnumEntry Name="Value2" NameSpace="Custom">
+      <Description>User defined value2.</Description>
+      <DisplayName>Value 2</DisplayName>
+      <Value>1</Value>
+    </EnumEntry>
+    <EnumEntry Name="Value3" NameSpace="Custom">
+      <Description>User defined value3.</Description>
+      <DisplayName>Value 3</DisplayName>
+      <Value>2</Value>
+    </EnumEntry>
+    <EnumEntry Name="Value4" NameSpace="Custom">
+      <Description>User defined value4.</Description>
+      <DisplayName>Value 4</DisplayName>
+      <Value>3</Value>
+    </EnumEntry>
+    <EnumEntry Name="Value5" NameSpace="Custom">
+      <Description>User defined value5.</Description>
+      <DisplayName>Value 5</DisplayName>
+      <Value>4</Value>
+    </EnumEntry>
+    <pValue>UserDefinedValueSelector_Reg</pValue>
+    <pSelected>UserDefinedValue</pSelected>
+  </Enumeration>
+  <Integer Name="UserDefinedValue" NameSpace="Custom">
+    <ToolTip>User defined value.</ToolTip>
+    <Description>User defined value.</Description>
+    <DisplayName>User Defined Value</DisplayName>
+    <Visibility>Guru</Visibility>
+    <ImposedAccessMode>RW</ImposedAccessMode>
+    <pValue>UserDefinedValue_Reg</pValue>
+    <Min>-2147483648</Min>
+    <Max>2147483647</Max>
+    <Inc>1</Inc>
+    <Representation>Linear</Representation>
+  </Integer>
+  <IntReg Name="UserDefinedValueSelector_Reg" NameSpace="Custom">
+    <Address>0x5430</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <Sign>Unsigned</Sign>
+    <Endianess>LittleEndian</Endianess>
+  </IntReg>
+  <IntReg Name="UserDefinedValue_Reg" NameSpace="Custom">
+    <Address>0x5434</Address>
+    <pAddress>CamRegBaseAddress</pAddress>
+    <Length>4</Length>
+    <AccessMode>RW</AccessMode>
+    <pPort>Device</pPort>
+    <pInvalidator>UserDefinedValueSelector_Reg</pInvalidator>
+    <Sign>Signed</Sign>
     <Endianess>LittleEndian</Endianess>
   </IntReg>
 </RegisterDescription>
