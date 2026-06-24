@@ -106,6 +106,7 @@ Capturing 5 frames from device 0 via GenICamDevice...
 |---|---|---|
 | `Blackfly_S_BFS-U3-16S2M.xml` | FLIR Blackfly S BFS-U3-16S2M (USB3 Vision) | 14 chunks |
 | `Blackfly_S_BFS-U3-63S4M.xml` | FLIR Blackfly S BFS-U3-63S4M (USB3 Vision) | 15 chunks |
+| `Chameleon3_CM3-U3-13Y3M.xml` | Point Grey Chameleon3 CM3-U3-13Y3M (USB3 Vision) | 15 chunks |
 | `Flea3_FL3-U3-13S2M.xml` | Point Grey Flea3 FL3-U3-13S2M (USB3 Vision) | 14 chunks |
 | `MV-CA013-A0UM.xml` | HIKVISION MV-CA013-A0UM (USB3 Vision) | none |
 | `UI322xCP-M.xml` | IDS UI-3220CP-M (USB3 Vision) | none |
