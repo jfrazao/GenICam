@@ -9,20 +9,24 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
     {
         static void Main(string[] args)
         {
-            // Usage: [producerPath] [deviceIndex]
-            // producerPath — path to a .cti file; omit to scan GENICAM_GENTL64_PATH
-            // deviceIndex  — defaults to 0 when a producer path is given, 1 otherwise
+            // Usage: [producerPath.cti] [deviceIndex] [sn=<serial>]
+            //   producerPath — path to a .cti file; omit to scan GENICAM_GENTL64_PATH
+            //   deviceIndex  — global device index (default 1, or 0 when a producer path is given)
+            //   sn=<serial>  — pin the GenICamDevice capture/chunk/message-bus steps to this serial.
+            //                  Recommended when several GenTL producers are present: the global
+            //                  device index can resolve to a different physical camera on each open,
+            //                  so index-based selection is not stable across producers.
             string? producerPath = null;
-            int targetIndex;
-            if (args.Length > 0 && args[0].EndsWith(".cti", StringComparison.OrdinalIgnoreCase))
+            string? serialNumber = null;
+            int? indexArg = null;
+            foreach (var a in args)
             {
-                producerPath = args[0];
-                targetIndex  = args.Length > 1 ? int.Parse(args[1]) : 0;
+                if (a.EndsWith(".cti", StringComparison.OrdinalIgnoreCase)) producerPath = a;
+                else if (a.StartsWith("sn=", StringComparison.OrdinalIgnoreCase)) serialNumber = a.Substring(3);
+                else if (int.TryParse(a, out int idx)) indexArg = idx;
             }
-            else
-            {
-                targetIndex = args.Length > 0 ? int.Parse(args[0]) : 1;
-            }
+            int targetIndex = indexArg ?? (producerPath != null ? 0 : 1);
+            if (serialNumber != null) Console.WriteLine($"(pinning GenICamDevice steps to serial {serialNumber})");
 
             Console.WriteLine("=== Bonsai.GenICam Test ===");
             Console.WriteLine();
@@ -111,103 +115,12 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             catch (Exception ex) { Console.WriteLine($"  Round-trip test failed: {ex.Message}"); }
             Console.WriteLine();
 
-            // --- Capture via GenICamDevice ---
-            Console.WriteLine($"Capturing 5 frames from device {targetIndex} via GenICamDevice...");
-            var captureDevice = new GenICamDevice { ProducerPath = producerPath, DeviceIndex = targetIndex, NumBuffers = 4, FrameTimeoutMs = 5000, AcquireFrames = true };
+            // --- Shared connection: capture + chunk data + feature round-trip over ONE connection ---
+            // Mirrors real Bonsai usage (one open connection reused for frames and feature I/O)
+            // instead of opening a separate connection per step, which some producers (e.g. IDS uEye)
+            // cannot release fast enough between opens.
+            ChunkDataTester.RunShared(producerPath, targetIndex, serialNumber);
 
-            int frameCount = 0;
-            var done = new ManualResetEventSlim(false);
-
-            using (captureDevice.Process(Observable.Never<GenICamMessage>())
-                .Where(m => m.Type == GenICamMessageType.Frame && m.Frame != null)
-                .Select(m => m.Frame!)
-                .Take(5)
-                .Subscribe(
-                    frame =>
-                    {
-                        frameCount++;
-                        Console.WriteLine($"  Frame {frameCount}: {frame.Width}x{frame.Height}  depth={frame.Depth}  ch={frame.Channels}");
-                    },
-                    ex =>
-                    {
-                        Console.WriteLine($"  ERROR: {ex.GetType().Name}: {ex.Message}");
-                        if (ex.InnerException != null)
-                            Console.WriteLine($"  Inner: {ex.InnerException.Message}");
-                        done.Set();
-                    },
-                    () =>
-                    {
-                        Console.WriteLine($"  Done — {frameCount} frame(s) received.");
-                        done.Set();
-                    }))
-            {
-                done.Wait();
-            }
-
-            Console.WriteLine();
-
-            // --- Chunk mode (live capture) ---
-            ChunkDataTester.RunLive(producerPath, targetIndex);
-
-            // --- GenICamDevice message-bus round-trip ---
-            // Key: ALL messages flow through ONE device.Process() subscription so they
-            // share the same open connection and writes are visible to subsequent reads.
-            Console.WriteLine("=== GenICamDevice: message-bus feature round-trip ===");
-            try
-            {
-                var ic = System.Globalization.CultureInfo.InvariantCulture;
-                // AcquireFrames=false: feature-only, observable completes when source completes.
-                var device = new GenICamDevice { ProducerPath = producerPath, DeviceIndex = targetIndex, AcquireFrames = false };
-
-                // Step 1: read original ExposureTime via a single-message subscription
-                var r0 = device.Process(Observable.Return(GenICamMessage.Read("ExposureTime"))).Wait();
-                Console.WriteLine($"  Initial read: {r0}");
-
-                if (r0.Type == GenICamMessageType.ReadResponse && r0.Payload != null)
-                {
-                    double original = double.Parse(r0.Payload, ic);
-                    double newVal   = Math.Round(original * 1.1, 2);
-
-                    // Step 2: single subscription — read, write, readback, restore, verify
-                    // All five messages share ONE device connection and ONE EventLoopScheduler,
-                    // so writes are visible to the subsequent reads.
-                    var msgs = new[]
-                    {
-                        GenICamMessage.Read("ExposureTime"),
-                        GenICamMessage.Write("ExposureTime", newVal.ToString(ic)),
-                        GenICamMessage.Read("ExposureTime"),
-                        GenICamMessage.Write("ExposureTime", original.ToString(ic)),
-                        GenICamMessage.Read("ExposureTime"),
-                    };
-                    var responses = device.Process(msgs.ToObservable()).ToArray().Wait();
-                    Console.WriteLine($"  [0] read before write : {responses[0]}");
-                    Console.WriteLine($"  [1] write {newVal}     : {responses[1]}");
-                    Console.WriteLine($"  [2] readback after write: {responses[2]}");
-                    Console.WriteLine($"  [3] restore {original} : {responses[3]}");
-                    Console.WriteLine($"  [4] readback after restore: {responses[4]}");
-
-                    // Allow 1-unit tolerance: integer cameras truncate float writes.
-                    double writtenBack  = double.TryParse(responses[2].Payload, System.Globalization.NumberStyles.Any, ic, out var wb) ? wb : double.NaN;
-                    double restoredBack = double.TryParse(responses[4].Payload, System.Globalization.NumberStyles.Any, ic, out var rb) ? rb : double.NaN;
-                    bool writeRoundTrip = responses[1].Type == GenICamMessageType.WriteAck
-                                      && responses[2].Type == GenICamMessageType.ReadResponse
-                                      && Math.Abs(writtenBack - newVal) < 1.0;
-                    bool restoreOk = responses[4].Type == GenICamMessageType.ReadResponse
-                                  && Math.Abs(restoredBack - original) < 1.0;
-                    Console.WriteLine($"  Write round-trip: {(writeRoundTrip ? "PASS" : "FAIL")}");
-                    Console.WriteLine($"  Restore verify  : {(restoreOk ? "PASS" : "FAIL")}");
-                }
-
-                Console.WriteLine("  Message-bus round-trip: PASSED.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"  Message-bus round-trip FAILED: {ex.GetType().Name}: {ex.Message}");
-                if (ex.InnerException != null)
-                    Console.WriteLine($"  Inner: {ex.InnerException.Message}");
-            }
-
-            Console.WriteLine();
             Console.WriteLine("Test complete.");
         }
 
