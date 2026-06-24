@@ -99,7 +99,7 @@ Buffer metadata (width, height, pixel format) from `DSGetBufferInfo`. Pixel form
 2. For `local:` scheme: `GCReadPort` at given address/length → raw XML bytes
 3. `XDocument.Parse` the XML → build `Dictionary<string, INode>`
 4. Node `pAddress` + `Length` + `AccessMode` from XML drives `GCReadPort`/`GCWritePort`
-5. `GetFeatureNode` / `SetFeatureNode` call `NodeMap.GetNode(name)` then cast to the appropriate node type
+5. `NodeMap.Read(name)` / `NodeMap.Write(name, value)` resolve the node via `GetNode(name)`, then read or coerce-and-write through the appropriate node type
 
 ### Camera connection — single owner (`GenICamDevice`)
 
