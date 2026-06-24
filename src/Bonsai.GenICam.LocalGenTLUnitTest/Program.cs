@@ -27,6 +27,11 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             Console.WriteLine("=== Bonsai.GenICam Test ===");
             Console.WriteLine();
 
+            // --- Chunk decode (offline) ---
+            // Deterministic; runs with no camera attached. Reads the saved example-camera XML
+            // fixtures copied next to the executable and exercises the chunk-ID map + TryReadChunk.
+            ChunkDataTester.RunOffline(System.IO.Path.Combine(AppContext.BaseDirectory, "example-camera-xml"));
+
             // --- Enumerate ---
             Console.WriteLine("Enumerating GenICam devices...");
             Console.WriteLine(producerPath != null ? $"Producer: {producerPath}" : "Producer: (GENICAM_GENTL64_PATH)");
@@ -138,6 +143,9 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             }
 
             Console.WriteLine();
+
+            // --- Chunk mode (live capture) ---
+            ChunkDataTester.RunLive(producerPath, targetIndex);
 
             // --- GenICamDevice message-bus round-trip ---
             // Key: ALL messages flow through ONE device.Process() subscription so they
