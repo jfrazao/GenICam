@@ -97,6 +97,7 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             int frameCount = 0, framesWithChunk = 0;
             IReadOnlyDictionary<string, object>? firstChunk = null;
             var responses = new List<GenICamMessage>();
+            var errors = new List<GenICamMessage>();
             double original = double.NaN, newVal = double.NaN;
             bool roundTripStarted = false;
             Exception? error = null;
@@ -114,7 +115,16 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                         var chunk = msg.Frame.ChunkData;
                         if (chunk != null && chunk.Count > 0) { framesWithChunk++; if (firstChunk == null) firstChunk = chunk; }
                         // Once frames are flowing, kick off the feature round-trip on the SAME connection.
-                        if (!roundTripStarted) { roundTripStarted = true; input.OnNext(GenICamMessage.Read("ExposureTime")); }
+                        if (!roundTripStarted)
+                        {
+                            roundTripStarted = true;
+                            // #13 probe: push a write the camera cannot accept THROUGH the live pipeline.
+                            // Pre-fix this faulted the stream (OnError on the scheduler thread -> unhandled
+                            // ObjectDisposedException -> process crash). It must now return an Error message
+                            // and leave the stream alive, so the ExposureTime round-trip below still completes.
+                            input.OnNext(GenICamMessage.Write("NoSuchFeature_ZZZ", "1"));
+                            input.OnNext(GenICamMessage.Read("ExposureTime"));
+                        }
                         if (frameCount >= 5) framesDone.Set();
                     }
                     else if (msg.Type == GenICamMessageType.ReadResponse || msg.Type == GenICamMessageType.WriteAck)
@@ -134,6 +144,10 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                             input.OnNext(GenICamMessage.Read("ExposureTime"));
                         }
                         if (responses.Count(r => r.Type == GenICamMessageType.ReadResponse) >= 3) roundTripDone.Set();
+                    }
+                    else if (msg.Type == GenICamMessageType.Error)
+                    {
+                        errors.Add(msg);
                     }
                 },
                 ex => { error = ex; framesDone.Set(); roundTripDone.Set(); },
@@ -172,6 +186,9 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
                 Console.WriteLine($"  Write round-trip: {(Math.Abs(afterWrite - newVal) <= tolW ? "PASS" : "(clamped — see values)")}");
                 Console.WriteLine($"  Restore verify  : {(Math.Abs(afterRestore - original) <= tolR ? "PASS" : "(clamped — see values)")}");
             }
+            bool streamSurvived = reads.Count >= 3;  // the round-trip after the rejected write completed
+            Console.WriteLine($"  #13 probe (rejected write through live bus): {errors.Count} Error message(s) received, stream survived: {(streamSurvived ? "yes" : "no")} : {((errors.Count >= 1 && streamSurvived) ? "PASS" : "FAIL")}");
+            foreach (var e in errors) Console.WriteLine($"    {e}");
             Console.WriteLine("  Shared-connection test complete — one open connection served frames, chunks, and feature I/O.");
             Console.WriteLine();
         }
