@@ -65,13 +65,14 @@ namespace Bonsai.GenICam
         internal bool HasOverride(string name) =>
             Overrides.Any(o => string.Equals(o.Name, name, StringComparison.Ordinal));
 
-        internal void Apply(NodeMap map)
+        // Applies each startup override and yields the result message (WriteAck on success, Error on
+        // rejection). Shares GenICamDevice.TryWrite with the runtime message bus so behavior is identical
+        // and failures are surfaced rather than silently swallowed. Caller decides what to do with the
+        // results (GenICamDevice emits them on its output stream).
+        internal IEnumerable<GenICamMessage> Apply(NodeMap map)
         {
             foreach (var ov in Overrides)
-            {
-                try { map.Write(ov.Name, ov.Value); }
-                catch { }
-            }
+                yield return GenICamDevice.TryWrite(map, ov.Name, ov.Value);
         }
     }
 
