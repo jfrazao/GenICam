@@ -11,6 +11,8 @@ namespace Bonsai.GenICam
         ReadResponse,
         /// <summary>Device acknowledgement confirming a write was applied.</summary>
         WriteAck,
+        /// <summary>A read or write request the device rejected (recoverable, per-feature); the payload carries the error message.</summary>
+        Error,
         /// <summary>A frame delivered by the acquisition loop.</summary>
         Frame
     }
@@ -53,12 +55,18 @@ namespace Bonsai.GenICam
         internal static GenICamMessage Ack(string featureName, string payload) =>
             new GenICamMessage(GenICamMessageType.WriteAck, featureName, payload);
 
+        internal static GenICamMessage Error(string featureName, string error) =>
+            new GenICamMessage(GenICamMessageType.Error, featureName, error);
+
         internal static GenICamMessage FromFrame(GenICamFrame frame) =>
             new GenICamMessage(GenICamMessageType.Frame, string.Empty, null, frame);
 
         /// <inheritdoc/>
-        public override string ToString() => Type == GenICamMessageType.Frame
-            ? $"Frame({Frame?.Width}x{Frame?.Height})"
-            : Payload != null ? $"{Type}({FeatureName}={Payload})" : $"{Type}({FeatureName})";
+        public override string ToString() => Type switch
+        {
+            GenICamMessageType.Frame => $"Frame({Frame?.Width}x{Frame?.Height})",
+            GenICamMessageType.Error => $"Error({FeatureName}: {Payload})",
+            _ => Payload != null ? $"{Type}({FeatureName}={Payload})" : $"{Type}({FeatureName})"
+        };
     }
 }
