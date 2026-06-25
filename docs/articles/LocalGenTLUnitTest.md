@@ -105,6 +105,7 @@ Cameras run through the full suite live pass capture, write/readback, and chunk 
 | Point Grey Flea3 FL3-U3-13S2M | `Flea3_FL3-U3-13S2M.xml` | ✓ 14 chunks | ✓ | ✓ | ✓ | ⚠️ quirk |
 | HIKVISION MV-CA013-A0UM | `MV-CA013-A0UM.xml` | ✓ no chunks | ✓ | ✓ | n/a | ✓ |
 | IDS UI-3220CP-M | `UI322xCP-M.xml` | ✓ no chunks | ✓ | ✓ | n/a | ✓ |
+| Allied Vision Mako U-029B | `Mako_U-029B.xml` | ✓ no chunks | ✓ | ✓ | n/a | ✓ |
 
 Legend: ✓ pass · ⚠️ quirk = harness rounding issue on seconds-unit `ExposureTime`, not a code bug (see above) · n/a = camera exposes no chunk data · — offline-decode fixture only (not re-tested live). All cameras are USB3 Vision.
 
