@@ -69,8 +69,8 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
 
         // One shared connection: a single GenICamDevice.Process() subscription that concurrently
         // receives frames (with chunk data) AND serves feature read/write messages — mirroring how a
-        // real Bonsai workflow keeps one connection open (GenICamCapture + feature nodes reusing the
-        // live NodeMap) instead of opening a competing connection per operation. Opening a fresh
+        // real Bonsai workflow keeps one connection open (a single GenICamDevice carrying both frame
+        // and feature traffic) instead of opening a competing connection per operation. Opening a fresh
         // connection per step is what makes some producers (notably the IDS uEye) intermittently fail
         // to find or release the device between steps.
         //
