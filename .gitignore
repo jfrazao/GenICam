@@ -13,6 +13,9 @@
 *.nupkg
 *.snupkg
 project.lock.json
+
+# Language server / build cache
+*.lscache
 packages/
 
 # Build artifacts
