@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reactive.Linq;
 using System.Threading;
 using Bonsai.GenICam;
@@ -35,6 +36,15 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             // Deterministic; runs with no camera attached. Reads the saved tested-camera XML
             // fixtures copied next to the executable and exercises the chunk-ID map + TryReadChunk.
             ChunkDataTester.RunOffline(System.IO.Path.Combine(AppContext.BaseDirectory, "testedCameraXml"));
+
+            // --- Dispatch error-message check (offline, #13) ---
+            bool dispatchOk = DispatchTester.RunOffline(System.IO.Path.Combine(AppContext.BaseDirectory, "testedCameraXml"));
+            if (args.Contains("--offline-selftest"))
+            {
+                // Offline-only mode: run the deterministic checks above and exit without touching hardware.
+                Environment.Exit(dispatchOk ? 0 : 1);
+                return;
+            }
 
             // --- Enumerate ---
             Console.WriteLine("Enumerating GenICam devices...");
