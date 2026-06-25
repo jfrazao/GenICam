@@ -32,7 +32,9 @@ A [Bonsai](https://bonsai-rx.org) package for acquiring images and reading/writi
 
 Every camera interaction is a `GenICamMessage` flowing through a single `GenICamDevice` node. There is no separate capture node, no per-feature get/set node, and no implicit connection-sharing registry — one `GenICamDevice` owns the camera for its subscription lifetime, and reads, writes, and frames all travel on its one observable stream.
 
-A `GenICamMessage` carries a `Type` (`ReadRequest`, `WriteRequest`, `ReadResponse`, `WriteAck`, `Frame`), a `FeatureName`, an optional `Payload` string, and — for `Frame` messages — a `GenICamFrame`. `GenICamDevice` consumes requests from its upstream source and emits the matching responses, acks, and frames downstream.
+A `GenICamMessage` carries a `Type` (`ReadRequest`, `WriteRequest`, `ReadResponse`, `WriteAck`, `Error`, `Frame`), a `FeatureName`, an optional `Payload` string, and — for `Frame` messages — a `GenICamFrame`. `GenICamDevice` consumes requests from its upstream source and emits the matching responses, acks, and frames downstream.
+
+A read or write the device rejects (a feature the camera does not expose, a value out of range, a read-only node) is **not** fatal: `GenICamDevice` emits an `Error` message (with the feature name and the error text in `Payload`) and keeps the stream alive, rather than terminating it. Rejected **startup overrides** (`Features`) surface the same way. To react to failures, route them with `FilterMessage(MessageType=Error)`; to ignore them, do nothing — `ParseFeature`/`ParseChunk` only match their own responses and skip `Error` messages.
 
 Canonical chains:
 

@@ -105,12 +105,18 @@ namespace Bonsai.GenICam
                 try
                 {
                     var map = new NodeMap(ctx.Api, ctx.Port);
-                    Features.Apply(map);
                     _liveNodeMap = map;
 
                     var cancel = new CancellationTokenSource();
                     var syncObs = Observer.Synchronize(observer);
                     var scheduler = new EventLoopScheduler();
+
+                    // Apply startup overrides before acquisition starts and surface each result on the
+                    // output stream: WriteAck for applied values, Error for rejected ones (e.g. a feature
+                    // the connected camera does not expose). Uses the same TryWrite path as a runtime
+                    // write, so startup failures are reported rather than silently swallowed.
+                    foreach (var startupMsg in Features.Apply(map))
+                        syncObs.OnNext(startupMsg);
 
                     // When not acquiring frames, propagate source completion so .Wait()/.ToArray() work.
                     // When acquiring frames, ignore source completion — the acquisition loop drives lifetime.
@@ -195,18 +201,30 @@ namespace Bonsai.GenICam
             });
         }
 
-        private static GenICamMessage Dispatch(GenICamMessage msg, NodeMap map)
+        internal static GenICamMessage Dispatch(GenICamMessage msg, NodeMap map) => msg.Type switch
         {
-            switch (msg.Type)
-            {
-                case GenICamMessageType.WriteRequest:
-                    map.Write(msg.FeatureName, msg.Payload ?? string.Empty);
-                    return GenICamMessage.Ack(msg.FeatureName, msg.Payload ?? string.Empty);
-                case GenICamMessageType.ReadRequest:
-                    return GenICamMessage.Response(msg.FeatureName, FormatValue(map.Read(msg.FeatureName)));
-                default:
-                    return msg;
-            }
+            GenICamMessageType.WriteRequest => TryWrite(map, msg.FeatureName, msg.Payload ?? string.Empty),
+            GenICamMessageType.ReadRequest  => TryRead(map, msg.FeatureName),
+            _ => msg
+        };
+
+        // Single feature write/read, shared by the runtime message bus (Dispatch) and the startup-override
+        // path (FeatureConfiguration.Apply). A rejected read/write (missing/NI feature, out-of-range or
+        // read-only node, coercion failure) is a recoverable, per-feature condition: return an Error
+        // message rather than throwing, so neither path faults the stream. Faulting would tear down the
+        // whole device (capture + every other feature) and run the disposal/drain on the scheduler thread,
+        // which is the ObjectDisposedException race in #13. Genuinely fatal device failures still surface
+        // through the acquisition loop's OnError.
+        internal static GenICamMessage TryWrite(NodeMap map, string name, string value)
+        {
+            try { map.Write(name, value); return GenICamMessage.Ack(name, value); }
+            catch (Exception ex) { return GenICamMessage.Error(name, ex.Message); }
+        }
+
+        internal static GenICamMessage TryRead(NodeMap map, string name)
+        {
+            try { return GenICamMessage.Response(name, FormatValue(map.Read(name))); }
+            catch (Exception ex) { return GenICamMessage.Error(name, ex.Message); }
         }
 
         private static string FormatValue(FeatureValue v) => v.Value switch
