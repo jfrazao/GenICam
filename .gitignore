@@ -18,6 +18,9 @@ packages/
 # Build artifacts
 /artifacts/
 
+# Language server / build cache
+*.lscache
+
 # Bonsai local environment (executables, downloaded packages, editor state)
 **/.bonsai/Packages/
 **/.bonsai/*.exe
