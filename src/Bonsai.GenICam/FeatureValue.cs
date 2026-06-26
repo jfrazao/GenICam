@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Bonsai.GenICam
 {
     /// <summary>Discriminates the value type carried by a <see cref="FeatureValue"/>.</summary>
@@ -67,6 +69,19 @@ namespace Bonsai.GenICam
 
         /// <summary>Returns the value as <see cref="string"/>. Works for <see cref="FeatureValueType.String"/> and <see cref="FeatureValueType.Enumeration"/>.</summary>
         public string AsString() => (string)Value;
+
+        /// <summary>
+        /// Formats <see cref="Value"/> as the invariant-culture string carried on the GenICam message
+        /// bus (write payloads and read responses): floats/integers in invariant culture, booleans as
+        /// <c>"True"</c>/<c>"False"</c>, everything else via <see cref="object.ToString"/>.
+        /// </summary>
+        internal string ToPayloadString() => Value switch
+        {
+            double d => d.ToString(CultureInfo.InvariantCulture),
+            long   l => l.ToString(CultureInfo.InvariantCulture),
+            bool   b => b ? "True" : "False",
+            _        => Value?.ToString() ?? string.Empty
+        };
 
         /// <summary>Returns a <c>"Name = Value"</c> representation of this feature.</summary>
         public override string ToString() => $"{Name} = {Value}";
