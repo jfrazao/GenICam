@@ -25,46 +25,52 @@ src/Bonsai.GenICam/
 ├── GenICamDevice.cs           # Combinator<GenICamMessage, GenICamMessage> — single-owner device;
 │                              #   serializes feature reads/writes on EventLoopScheduler;
 │                              #   optional concurrent frame acquisition loop
+├── GenICamDeviceEditor.cs     # WorkflowComponentEditor — double-click opens the feature editor
+├── CameraSelectionEditors.cs  # CameraModelEditor / SerialNumberEditor (camera-selection dropdowns)
+├── IGenICamSource.cs          # Camera-selection surface shared by device-opening operators/editors
 ├── GenICamMessage.cs          # Immutable message: ReadRequest / WriteRequest / ReadResponse /
-│                              #   WriteAck / Frame; carries FeatureName + Payload + Frame
+│                              #   WriteAck / Error / Frame; carries FeatureName + Payload + Frame
 ├── GenICamFrame.cs            # Frame wrapper: IplImage + Timestamp + TimestampNs +
 │                              #   FrameId + IsIncomplete + ChunkData (per-frame metadata)
-├── CreateReadMessage.cs       # Combinator — emits a ReadRequest message on each upstream element
-├── CreateWriteMessage.cs      # Combinator — emits a WriteRequest message; typed overloads for
+├── CreateReadMessage.cs       # Transform — emits a ReadRequest message on each upstream element
+├── CreateWriteMessage.cs      # Transform — emits a WriteRequest message; typed overloads for
 │                              #   string, double, long, bool, FeatureValue
 ├── FilterMessage.cs           # Combinator — passes messages matching FeatureName and/or MessageType
-├── ParseFeature.cs            # ParseFeature — strongly typed output edge (double/long/bool/string)
-│                              #   via ExpressionBuilder; non-matching messages silently skipped
-├── ParseChunk.cs              # ParseChunk — strongly typed output edge for a named chunk-data
-│                              #   field from each frame's GenICamFrame.ChunkData
+├── ParseFeature.cs            # Strongly typed output edge (double/long/bool/string) via
+│                              #   ExpressionBuilder; non-matching messages silently skipped
+├── ParseChunk.cs              # Strongly typed output edge for a named chunk-data field
+│                              #   from each frame's GenICamFrame.ChunkData
 ├── EnumerateDevices.cs        # Source<DeviceInfo[]> — lists cameras
 ├── ListFeatureValues.cs       # Source<FeatureValue[]> — reads all readable features
-├── FeatureConfiguration.cs    # FeatureOverride list, editor form, UITypeEditors,
-│                              #   FeatureCategoryEditor, FeatureNameEditor
-├── FeatureRoundTripTester.cs  # Diagnostic: write/readback test for named features
+├── FeatureConfiguration.cs    # Startup FeatureOverride list + the WinForms feature-editor form
+├── FeatureValue.cs            # FeatureValueType enum + FeatureValue: int/double/string/bool/enum
+├── DeviceInfo.cs              # Discovered-device info: index, vendor, model, serial, TL type
+├── PixelFormat.cs             # PFNC code → OpenCV depth/channels, and PFNC name → code
 ├── GenICamXmlExtractor.cs     # Static helper — fetches raw GenICam XML from a device
 │
-├── DeviceInfo.cs              # Struct: index, vendor, model, serial, TL type
-├── FeatureValue.cs            # FeatureValueType enum + FeatureValue discriminated union: int/double/string/bool/enum
-│
 ├── GenTL/
-│   ├── GenTLLoader.cs          # Scans GENICAM_GENTL64_PATH, loads .cti files
+│   ├── GenTLLoader.cs          # Scans GENICAM_GENTL64_PATH, loads .cti files, locates devices
+│   ├── DeviceSession.cs        # Opens a device (serial→model→index) and owns the api/system/
+│   │                           #   interface/device stack; exposes Port, lazy NodeMap, DeviceInfo
 │   ├── GenTLApi.cs             # Delegate types + GetProcAddress binding per producer
-│   ├── GenTLTypes.cs           # GC_ERROR, handle typedefs, enums (BUFFER_INFO_CMD etc.)
-│   ├── GenTLSystem.cs          # TL_HANDLE wrapper — IDisposable, opens interfaces
-│   ├── GenTLInterface.cs       # IF_HANDLE wrapper — enumerates/opens devices
-│   ├── GenTLDevice.cs          # DEV_HANDLE wrapper — opens datastreams, exposes port
-│   ├── GenTLDataStream.cs      # DS_HANDLE — allocates buffers, starts/stops, fires events
-│   ├── GenTLException.cs       # GC_ERROR → GenTLException (message includes error name)
+│   ├── GenTLMarshal.cs         # Two-call string-fetch marshalling helper
+│   ├── GenTLTypes.cs           # GCError, handle typedefs, enums (BufferInfoCmd etc.)
+│   ├── GenTLHandle.cs          # Base for the module wrappers — shared handle close/dispose
+│   ├── GenTLSystem.cs          # TL handle — opens interfaces, finds/opens devices
+│   ├── GenTLInterface.cs       # IF handle — enumerates/opens devices, reads device info
+│   ├── GenTLDevice.cs          # DEV handle — opens datastreams, exposes port
+│   ├── GenTLDataStream.cs      # DS handle — allocates buffers, starts/stops, fires events
+│   ├── GenTLException.cs       # GCError → GenTLException (message includes error name)
 │   └── NativeMethods.cs        # P/Invoke: LoadLibrary, GetProcAddress, FreeLibrary
 │
 └── GenApi/
     ├── NodeMap.cs              # Fetches XML, builds node tree, read/write by name
-    └── NodeTypes.cs            # INode + concrete types: IntegerNode, FloatNode,
-                                #   StringNode, BooleanNode, EnumerationNode,
-                                #   CommandNode, ConverterNode, IntConverterNode,
-                                #   MaskedIntRegNode, IntSwissKnifeNode, SwissKnifeNode
+    └── NodeTypes.cs            # NodeBase + concrete node types (Integer, Float, String, Boolean,
+                                #   Enumeration, Command, Converter/IntConverter, MaskedIntReg,
+                                #   SwissKnife/IntSwissKnife) + IRegisterNode / ConverterNodeBase
 ```
+
+> The diagnostic write/readback tester (`FeatureRoundTripTester`) lives in the `Bonsai.GenICam.LocalGenTLUnitTest` test app, not the library.
 
 ## Key Design Decisions
 
