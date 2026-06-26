@@ -6,10 +6,8 @@ using OpenCV.Net;
 
 namespace Bonsai.GenICam.GenTL
 {
-    internal sealed class GenTLDataStream : IDisposable
+    internal sealed class GenTLDataStream : GenTLHandle
     {
-        private readonly GenTLApi _api;
-        private IntPtr _handle;
         private IntPtr _newBufferEvent;
         private readonly List<IntPtr> _buffers = new List<IntPtr>();
         private int _fallbackWidth;
@@ -18,11 +16,7 @@ namespace Bonsai.GenICam.GenTL
         private IReadOnlyDictionary<ulong, string>? _chunkIdToName;
         private Func<string, byte[], object?>? _parseChunk;
 
-        internal GenTLDataStream(GenTLApi api, IntPtr handle)
-        {
-            _api = api;
-            _handle = handle;
-        }
+        internal GenTLDataStream(GenTLApi api, IntPtr handle) : base(api) => _handle = handle;
 
         internal void SetFallbacks(int width, int height, ulong pixelFmt)
         {
@@ -293,40 +287,30 @@ namespace Bonsai.GenICam.GenTL
             return BitConverter.ToUInt64(buf, 0);
         }
 
-        private ulong GetBufferInfoUInt64(IntPtr hBuffer, BufferInfoCmd cmd)
+        // Fills an n-byte buffer from DSGetBufferInfo; shared by the typed buffer-info getters below.
+        private byte[] GetBufferInfoBytes(IntPtr hBuffer, BufferInfoCmd cmd, int n)
         {
-            var buf = new byte[8];
-            var size = new UIntPtr(8);
+            var buf = new byte[n];
+            var size = new UIntPtr((uint)n);
             GenTLException.Check(_api.DSGetBufferInfo(_handle, hBuffer, (uint)cmd, out _, buf, ref size));
-            return BitConverter.ToUInt64(buf, 0);
+            return buf;
         }
 
+        private ulong GetBufferInfoUInt64(IntPtr hBuffer, BufferInfoCmd cmd)
+            => BitConverter.ToUInt64(GetBufferInfoBytes(hBuffer, cmd, 8), 0);
+
         private bool GetBufferInfoBool(IntPtr hBuffer, BufferInfoCmd cmd)
-        {
-            var buf = new byte[1];
-            var size = new UIntPtr(1);
-            GenTLException.Check(_api.DSGetBufferInfo(_handle, hBuffer, (uint)cmd, out _, buf, ref size));
-            return buf[0] != 0;
-        }
+            => GetBufferInfoBytes(hBuffer, cmd, 1)[0] != 0;
 
         private IntPtr GetBufferInfoPtr(IntPtr hBuffer, BufferInfoCmd cmd)
         {
-            var buf = new byte[IntPtr.Size];
-            var size = new UIntPtr((uint)buf.Length);
-            GenTLException.Check(_api.DSGetBufferInfo(_handle, hBuffer, (uint)cmd, out _, buf, ref size));
+            var buf = GetBufferInfoBytes(hBuffer, cmd, IntPtr.Size);
             return IntPtr.Size == 8
                 ? (IntPtr)BitConverter.ToInt64(buf, 0)
                 : (IntPtr)BitConverter.ToInt32(buf, 0);
         }
 
-        public void Dispose()
-        {
-            if (_handle != IntPtr.Zero)
-            {
-                Stop();
-                _api.DSClose(_handle);
-                _handle = IntPtr.Zero;
-            }
-        }
+        protected override void OnDisposing() => Stop();
+        protected override void CloseHandle() => _api.DSClose(_handle);
     }
 }

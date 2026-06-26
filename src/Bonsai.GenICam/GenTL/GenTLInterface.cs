@@ -4,14 +4,10 @@ using System.Text;
 
 namespace Bonsai.GenICam.GenTL
 {
-    internal sealed class GenTLInterface : IDisposable
+    internal sealed class GenTLInterface : GenTLHandle
     {
-        private readonly GenTLApi _api;
-        private IntPtr _handle;
-
-        internal GenTLInterface(GenTLApi api, IntPtr handle)
+        internal GenTLInterface(GenTLApi api, IntPtr handle) : base(api)
         {
-            _api = api;
             _handle = handle;
             _api.IFUpdateDeviceList(_handle, out _, 1000);
         }
@@ -81,13 +77,6 @@ namespace Bonsai.GenICam.GenTL
             return new GenTLDevice(_api, hDev);
         }
 
-        public void Dispose()
-        {
-            if (_handle != IntPtr.Zero)
-            {
-                _api.IFClose(_handle);
-                _handle = IntPtr.Zero;
-            }
-        }
+        protected override void CloseHandle() => _api.IFClose(_handle);
     }
 }

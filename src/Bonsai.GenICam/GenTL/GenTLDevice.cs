@@ -3,16 +3,9 @@ using System.Text;
 
 namespace Bonsai.GenICam.GenTL
 {
-    internal sealed class GenTLDevice : IDisposable
+    internal sealed class GenTLDevice : GenTLHandle
     {
-        private readonly GenTLApi _api;
-        private IntPtr _handle;
-
-        internal GenTLDevice(GenTLApi api, IntPtr handle)
-        {
-            _api = api;
-            _handle = handle;
-        }
+        internal GenTLDevice(GenTLApi api, IntPtr handle) : base(api) => _handle = handle;
 
         internal IntPtr GetPort()
         {
@@ -35,13 +28,6 @@ namespace Bonsai.GenICam.GenTL
             return new GenTLDataStream(_api, hDS);
         }
 
-        public void Dispose()
-        {
-            if (_handle != IntPtr.Zero)
-            {
-                _api.DevClose(_handle);
-                _handle = IntPtr.Zero;
-            }
-        }
+        protected override void CloseHandle() => _api.DevClose(_handle);
     }
 }
