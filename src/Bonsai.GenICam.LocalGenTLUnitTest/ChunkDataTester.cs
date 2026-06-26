@@ -9,64 +9,11 @@ using Bonsai.GenICam.GenApi;
 
 namespace Bonsai.GenICam.LocalGenTLUnitTest
 {
-    // Exercises the chunk-data path two ways:
-    //   RunOffline  — deterministic, no camera. Builds a NodeMap from each saved example XML,
-    //                 prints the discovered chunk-ID → feature map, and decodes synthetic chunk
-    //                 bytes through TryReadChunk (covering Port-based layout + SwissKnife chains).
-    //   RunLive     — captures frames with ChunkModeActive=true and prints GenICamFrame.ChunkData.
+    // Live hardware test: opens one GenICamDevice and drives capture + chunk data + feature I/O
+    // through a single Process() subscription. (Offline chunk-decode coverage lives in the
+    // Bonsai.GenICam.Tests project.)
     static class ChunkDataTester
     {
-        public static void RunOffline(string xmlDir)
-        {
-            Console.WriteLine("=== Chunk decode (offline, from saved XML fixtures) ===");
-            if (!Directory.Exists(xmlDir))
-            {
-                Console.WriteLine($"  XML fixture directory not found: {xmlDir}");
-                Console.WriteLine();
-                return;
-            }
-
-            var files = Directory.GetFiles(xmlDir, "*.xml").OrderBy(f => f).ToArray();
-            if (files.Length == 0)
-            {
-                Console.WriteLine($"  No XML fixtures in: {xmlDir}");
-                Console.WriteLine();
-                return;
-            }
-
-            foreach (var file in files)
-            {
-                Console.WriteLine();
-                Console.WriteLine($"--- {Path.GetFileName(file)} ---");
-                NodeMap map;
-                try { map = new NodeMap(File.ReadAllText(file)); }
-                catch (Exception ex) { Console.WriteLine($"  Parse failed: {ex.Message}"); continue; }
-
-                var chunkMap = map.ChunkIdToName;
-                Console.WriteLine($"  Chunk features discovered: {chunkMap.Count}");
-                if (chunkMap.Count == 0)
-                {
-                    Console.WriteLine("  (no <ChunkID> ports — this camera exposes no chunk data)");
-                    continue;
-                }
-
-                // 16 bytes of recognizable, non-zero payload. Enough for any 1/2/4/8-byte register;
-                // every byte 0xAB so single-byte and multi-byte registers both decode to non-zero.
-                var bytes = Enumerable.Repeat((byte)0xAB, 16).ToArray();
-
-                int decoded = 0, failed = 0;
-                foreach (var kv in chunkMap.OrderBy(k => k.Value, StringComparer.Ordinal))
-                {
-                    object? value = map.TryReadChunk(kv.Value, bytes);
-                    if (value != null) decoded++; else failed++;
-                    Console.WriteLine($"    0x{kv.Key:X8}  {kv.Value,-28} => {Describe(value)}");
-                }
-                Console.WriteLine($"  Decoded {decoded}/{chunkMap.Count} chunk feature(s) from synthetic bytes" +
-                                  (failed > 0 ? $" ({failed} returned null)" : ""));
-            }
-            Console.WriteLine();
-        }
-
         // One shared connection: a single GenICamDevice.Process() subscription that concurrently
         // receives frames (with chunk data) AND serves feature read/write messages — mirroring how a
         // real Bonsai workflow keeps one connection open (a single GenICamDevice carrying both frame
