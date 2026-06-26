@@ -42,14 +42,6 @@ namespace Bonsai.GenICam
 
         /// <summary>Creates a write message whose payload is taken from an upstream <see cref="FeatureValue"/>.</summary>
         public IObservable<GenICamMessage> Process(IObservable<FeatureValue> source)
-        { var n = RequiredName(); return source.Select(v => GenICamMessage.Write(n, FormatFeatureValue(v))); }
-
-        private static string FormatFeatureValue(FeatureValue v) => v.Value switch
-        {
-            double d => d.ToString(CultureInfo.InvariantCulture),
-            long   l => l.ToString(CultureInfo.InvariantCulture),
-            bool   b => b ? "True" : "False",
-            _        => v.Value?.ToString() ?? string.Empty
-        };
+        { var n = RequiredName(); return source.Select(v => GenICamMessage.Write(n, v.ToPayloadString())); }
     }
 }
