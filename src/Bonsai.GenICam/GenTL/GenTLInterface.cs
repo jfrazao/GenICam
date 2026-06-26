@@ -57,6 +57,23 @@ namespace Bonsai.GenICam.GenTL
             }
         }
 
+        // Builds a DeviceInfo from the interface-derivable fields for the given device ID. The caller
+        // fills GlobalIndex / InterfaceID / ProducerPath, which the interface does not know.
+        internal DeviceInfo GetDeviceInfo(string deviceId)
+        {
+            string TryGet(DeviceInfoCmd cmd)
+            { try { return GetDeviceInfoString(deviceId, cmd); } catch { return string.Empty; } }
+            return new DeviceInfo
+            {
+                ID           = deviceId,
+                Vendor       = TryGet(DeviceInfoCmd.Vendor),
+                Model        = TryGet(DeviceInfoCmd.Model),
+                SerialNumber = TryGet(DeviceInfoCmd.SerialNumber),
+                TLType       = TryGet(DeviceInfoCmd.TLType),
+                DisplayName  = TryGet(DeviceInfoCmd.DisplayName),
+            };
+        }
+
         internal GenTLDevice OpenDevice(string deviceId, DeviceAccessFlags flags = DeviceAccessFlags.Control)
         {
             var idBytes = Encoding.ASCII.GetBytes(deviceId + "\0");
