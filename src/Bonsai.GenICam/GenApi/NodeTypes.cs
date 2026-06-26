@@ -20,8 +20,17 @@ namespace Bonsai.GenICam.GenApi
         public string? PIsLocked { get; set; }
     }
 
+    // Register nodes hold an absolute address (plus optional <pAddress> offset refs) and an
+    // optional <pPort> naming the Port node they read/write through.
+    internal interface IRegisterNode
+    {
+        ulong Address { get; set; }
+        string[]? PAddresses { get; set; }
+        string? PPort { get; set; }
+    }
+
     // Direct register nodes (hold the actual address + length)
-    internal class IntRegNode : NodeBase
+    internal class IntRegNode : NodeBase, IRegisterNode
     {
         public ulong Address { get; set; }        // direct <Address> value (0 if absent)
         public string[]? PAddresses { get; set; }  // zero or more <pAddress> refs, all summed into Address
@@ -31,7 +40,7 @@ namespace Bonsai.GenICam.GenApi
         public string? PPort { get; set; }         // <pPort> — names a Port node whose ChunkID identifies the chunk
     }
 
-    internal class FloatRegNode : NodeBase
+    internal class FloatRegNode : NodeBase, IRegisterNode
     {
         public ulong Address { get; set; }
         public string[]? PAddresses { get; set; }
@@ -40,7 +49,7 @@ namespace Bonsai.GenICam.GenApi
         public string? PPort { get; set; }
     }
 
-    internal class StringRegNode : NodeBase
+    internal class StringRegNode : NodeBase, IRegisterNode
     {
         public ulong Address { get; set; }
         public string[]? PAddresses { get; set; }
@@ -126,8 +135,9 @@ namespace Bonsai.GenICam.GenApi
         public string? Formula { get; set; }
     }
 
-    // Linear-conversion nodes: output = (pValue - Offset) / Gain  (read) or inverse (write).
-    internal class ConverterNode : NodeBase
+    // Linear-conversion nodes: output = FormulaTo(pValue) (read) or FormulaFrom (write).
+    // IntConverterNode is the integer-valued variant — its result is truncated to long.
+    internal abstract class ConverterNodeBase : NodeBase
     {
         public string? PValue { get; set; }
         public string? FormulaTo { get; set; }    // formula applied when reading (input → output)
@@ -135,11 +145,7 @@ namespace Bonsai.GenICam.GenApi
         public Dictionary<string, string> Variables { get; set; } = new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
-    internal class IntConverterNode : NodeBase
-    {
-        public string? PValue { get; set; }
-        public string? FormulaTo { get; set; }
-        public string? FormulaFrom { get; set; }
-        public Dictionary<string, string> Variables { get; set; } = new Dictionary<string, string>(StringComparer.Ordinal);
-    }
+    internal class ConverterNode : ConverterNodeBase { }
+
+    internal class IntConverterNode : ConverterNodeBase { }
 }
