@@ -14,15 +14,6 @@ using static Bonsai.GenICam.GenApi.NodeVisibility;
 
 namespace Bonsai.GenICam
 {
-    internal interface IGenICamSource
-    {
-        string? ProducerPath { get; }
-        int DeviceIndex { get; }
-        string? CameraModel { get; }
-        string? SerialNumber { get; }
-        NodeMap? LiveNodeMap { get; }
-    }
-
     /// <summary>
     /// Stores a single named feature override that is applied to the camera at workflow startup.
     /// </summary>
