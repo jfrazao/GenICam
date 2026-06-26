@@ -2,7 +2,7 @@
   href: ../index.md
 - name: Local Build and Run
   href: LocalBuildRun.md
-- name: Running the LocalGenTLUnitTest
+- name: Test suites
   href: LocalGenTLUnitTest.md
 - name: Architecture
   href: Architecture.md

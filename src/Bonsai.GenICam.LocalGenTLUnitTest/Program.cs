@@ -29,22 +29,9 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             int targetIndex = indexArg ?? (producerPath != null ? 0 : 1);
             if (serialNumber != null) Console.WriteLine($"(pinning GenICamDevice steps to serial {serialNumber})");
 
-            Console.WriteLine("=== Bonsai.GenICam Test ===");
+            Console.WriteLine("=== Bonsai.GenICam hardware test ===");
+            Console.WriteLine("(Offline, hardware-free tests live in Bonsai.GenICam.Tests — run `dotnet test`.)");
             Console.WriteLine();
-
-            // --- Chunk decode (offline) ---
-            // Deterministic; runs with no camera attached. Reads the saved tested-camera XML
-            // fixtures copied next to the executable and exercises the chunk-ID map + TryReadChunk.
-            ChunkDataTester.RunOffline(System.IO.Path.Combine(AppContext.BaseDirectory, "testedCameraXml"));
-
-            // --- Dispatch error-message check (offline, #13) ---
-            bool dispatchOk = DispatchTester.RunOffline(System.IO.Path.Combine(AppContext.BaseDirectory, "testedCameraXml"));
-            if (args.Contains("--offline-selftest"))
-            {
-                // Offline-only mode: run the deterministic checks above and exit without touching hardware.
-                Environment.Exit(dispatchOk ? 0 : 1);
-                return;
-            }
 
             // --- Enumerate ---
             Console.WriteLine("Enumerating GenICam devices...");
