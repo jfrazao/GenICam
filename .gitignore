@@ -1,9 +1,14 @@
+.vs/
+**/.bonsai/Bonsai.exe*
+**/.bonsai/Packages/
+**/.bonsai/Settings/
+/artifacts/
+
 # Build outputs
 [Bb]in/
 [Oo]bj/
 
 # Visual Studio
-.vs/
 *.user
 *.suo
 *.userosscache
@@ -16,16 +21,13 @@ project.lock.json
 packages/
 
 # Build artifacts
-/artifacts/
 
 # Language server / build cache
 *.lscache
 
 # Bonsai local environment (executables, downloaded packages, editor state)
-**/.bonsai/Packages/
 **/.bonsai/*.exe
 **/.bonsai/*.exe.*
-**/.bonsai/Settings/
 
 # Bonsai workflow layout files (window positions, visualizer state)
 workflows/*.layout
