@@ -20,13 +20,6 @@ namespace Bonsai.GenICam.GenTL
             return hPort;
         }
 
-        internal string GetInfoString(DeviceInfoCmd cmd)
-        {
-            return GenTLApi.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
-                return _api.DevGetInfo(_handle, (uint)cmd, out _, buf, ref sz);
-            });
-        }
-
         internal GenTLDataStream OpenDataStream()
         {
             GenTLException.Check(_api.DevGetNumDataStreams(_handle, out uint count));
