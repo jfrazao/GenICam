@@ -26,58 +26,12 @@ namespace Bonsai.GenICam
         public override IObservable<FeatureValue[]> Generate()
         {
             return Observable.Using(
-                () => OpenDevice(),
+                () => DeviceSession.Open(ProducerPath, DeviceIndex, null, null, DeviceAccessFlags.ReadOnly),
                 ctx =>
                 {
-                    var map = new NodeMap(ctx.Api, ctx.Port);
-                    var features = new System.Collections.Generic.List<FeatureValue>(map.TryReadAll());
+                    var features = new System.Collections.Generic.List<FeatureValue>(ctx.NodeMap.TryReadAll());
                     return Observable.Return(features.ToArray());
                 });
-        }
-
-        private DeviceContext OpenDevice()
-        {
-            var (api, localIndex) = GenTLLoader.ResolveAndLoad(
-                string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath, DeviceIndex);
-            GenTLSystem? system = null;
-            try
-            {
-                system = new GenTLSystem(api);
-                var (_, _, iface, device) = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.ReadOnly);
-                return new DeviceContext(api, system, iface, device);
-            }
-            catch
-            {
-                system?.Dispose();
-                api.Dispose();
-                throw;
-            }
-        }
-
-        private sealed class DeviceContext : IDisposable
-        {
-            internal readonly GenTLApi Api;
-            internal readonly IntPtr Port;
-            private readonly GenTLSystem _system;
-            private readonly GenTLInterface _iface;
-            private readonly GenTLDevice _device;
-
-            internal DeviceContext(GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device)
-            {
-                Api = api;
-                _system = system;
-                _iface = iface;
-                _device = device;
-                Port = device.GetPort();
-            }
-
-            public void Dispose()
-            {
-                _device.Dispose();
-                _iface.Dispose();
-                _system.Dispose();
-                Api.Dispose();
-            }
         }
     }
 }

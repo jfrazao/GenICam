@@ -80,20 +80,11 @@ namespace Bonsai.GenICam.GenTL
                             {
                                 foreach (string devId in iface.GetDeviceIDs())
                                 {
-                                    string TryGet(DeviceInfoCmd cmd)
-                                    { try { return iface.GetDeviceInfoString(devId, cmd); } catch { return string.Empty; } }
-                                    results.Add(new DeviceInfo
-                                    {
-                                        GlobalIndex   = globalIndex++,
-                                        ID            = devId,
-                                        InterfaceID   = ifaceId,
-                                        ProducerPath  = api.ProducerPath,
-                                        Vendor        = TryGet(DeviceInfoCmd.Vendor),
-                                        Model         = TryGet(DeviceInfoCmd.Model),
-                                        SerialNumber  = TryGet(DeviceInfoCmd.SerialNumber),
-                                        TLType        = TryGet(DeviceInfoCmd.TLType),
-                                        DisplayName   = TryGet(DeviceInfoCmd.DisplayName)
-                                    });
+                                    var info = iface.GetDeviceInfo(devId);
+                                    info.GlobalIndex  = globalIndex++;
+                                    info.InterfaceID  = ifaceId;
+                                    info.ProducerPath = api.ProducerPath;
+                                    results.Add(info);
                                 }
                             }
                         }
@@ -106,7 +97,7 @@ namespace Bonsai.GenICam.GenTL
 
         // Find and open a device by serial or model across all producers (or just the specified one).
         // Caller owns all four returned objects and must dispose them.
-        internal static (GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device)
+        internal static (GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device, string ifaceId, string devId)
             FindAndOpenDeviceAcrossProducers(
                 string? serialNumber, string? cameraModel, int modelIndex,
                 string? explicitProducerPath = null,
@@ -127,7 +118,7 @@ namespace Bonsai.GenICam.GenTL
                     var r = serialNumber != null
                         ? system.FindAndOpenDeviceBySerial(serialNumber, flags)
                         : system.FindAndOpenDeviceByModel(cameraModel!, modelIndex, flags);
-                    return (api, system, r.iface, r.device);
+                    return (api, system, r.iface, r.device, r.ifaceId, r.devId);
                 }
                 catch
                 {

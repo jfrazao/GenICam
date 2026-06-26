@@ -4,14 +4,10 @@ using System.Text;
 
 namespace Bonsai.GenICam.GenTL
 {
-    internal sealed class GenTLSystem : IDisposable
+    internal sealed class GenTLSystem : GenTLHandle
     {
-        private readonly GenTLApi _api;
-        private IntPtr _handle;
-
-        internal GenTLSystem(GenTLApi api)
+        internal GenTLSystem(GenTLApi api) : base(api)
         {
-            _api = api;
             GenTLException.Check(_api.TLOpen(out _handle));
             _api.TLUpdateInterfaceList(_handle, out _, 1000);
         }
@@ -48,43 +44,13 @@ namespace Bonsai.GenICam.GenTL
             return count;
         }
 
-        // Walks all interfaces to find the device at the given flat global index and opens it,
-        // all while keeping the interface handle alive.  Using a separate FindDevice + OpenInterface
-        // cycle (close then reopen) causes GC_ERR_INVALID_ID on producers such as IDS peak that
-        // assign dynamic device IDs per interface session.
-        internal (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) FindAndOpenDevice(
-            int index, DeviceAccessFlags flags = DeviceAccessFlags.Control)
-        {
-            int current = 0;
-            foreach (string ifaceId in GetInterfaceIDs())
-            {
-                var iface = OpenInterface(ifaceId);
-                try
-                {
-                    var devIds = iface.GetDeviceIDs();
-                    for (int i = 0; i < devIds.Count; i++)
-                    {
-                        if (current == index)
-                        {
-                            var device = iface.OpenDevice(devIds[i], flags);
-                            return (ifaceId, devIds[i], iface, device);
-                        }
-                        current++;
-                    }
-                }
-                catch
-                {
-                    iface.Dispose();
-                    throw;
-                }
-                iface.Dispose();
-            }
-            throw new InvalidOperationException(
-                $"Device index {index} not found. Only {current} device(s) are visible.");
-        }
-
-        internal (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) FindAndOpenDeviceBySerial(
-            string serialNumber, DeviceAccessFlags flags = DeviceAccessFlags.Control)
+        // Walks every interface (keeping each handle alive while its devices are inspected — closing and
+        // reopening causes GC_ERR_INVALID_ID on producers like IDS peak that assign dynamic device IDs
+        // per interface session) and opens the first device for which `match` returns true. Interfaces
+        // that don't hold the match are disposed; on any error the open interface is disposed and the
+        // error rethrown. `notFound` builds the exception thrown when nothing matches.
+        private (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) FindAndOpenDevice(
+            Func<GenTLInterface, string, bool> match, DeviceAccessFlags flags, Func<Exception> notFound)
         {
             foreach (string ifaceId in GetInterfaceIDs())
             {
@@ -93,10 +59,7 @@ namespace Bonsai.GenICam.GenTL
                 {
                     foreach (string devId in iface.GetDeviceIDs())
                     {
-                        string serial;
-                        try { serial = iface.GetDeviceInfoString(devId, DeviceInfoCmd.SerialNumber); }
-                        catch { serial = string.Empty; }
-                        if (string.Equals(serial, serialNumber, StringComparison.Ordinal))
+                        if (match(iface, devId))
                         {
                             var device = iface.OpenDevice(devId, flags);
                             return (ifaceId, devId, iface, device);
@@ -110,56 +73,54 @@ namespace Bonsai.GenICam.GenTL
                 }
                 iface.Dispose();
             }
-            throw new InvalidOperationException($"No camera with serial number '{serialNumber}' found.");
+            throw notFound();
+        }
+
+        internal (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) FindAndOpenDevice(
+            int index, DeviceAccessFlags flags = DeviceAccessFlags.Control)
+        {
+            int current = 0;
+            return FindAndOpenDevice(
+                (iface, devId) => current++ == index,
+                flags,
+                () => new InvalidOperationException($"Device index {index} not found. Only {current} device(s) are visible."));
+        }
+
+        internal (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) FindAndOpenDeviceBySerial(
+            string serialNumber, DeviceAccessFlags flags = DeviceAccessFlags.Control)
+        {
+            return FindAndOpenDevice(
+                (iface, devId) =>
+                {
+                    string serial;
+                    try { serial = iface.GetDeviceInfoString(devId, DeviceInfoCmd.SerialNumber); }
+                    catch { serial = string.Empty; }
+                    return string.Equals(serial, serialNumber, StringComparison.Ordinal);
+                },
+                flags,
+                () => new InvalidOperationException($"No camera with serial number '{serialNumber}' found."));
         }
 
         internal (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) FindAndOpenDeviceByModel(
             string cameraModel, int index, DeviceAccessFlags flags = DeviceAccessFlags.Control)
         {
             int current = 0;
-            foreach (string ifaceId in GetInterfaceIDs())
-            {
-                var iface = OpenInterface(ifaceId);
-                try
+            return FindAndOpenDevice(
+                (iface, devId) =>
                 {
-                    foreach (string devId in iface.GetDeviceIDs())
-                    {
-                        string TryGet(DeviceInfoCmd cmd)
-                        { try { return iface.GetDeviceInfoString(devId, cmd); } catch { return string.Empty; } }
-                        string combined = (TryGet(DeviceInfoCmd.Vendor) + " " + TryGet(DeviceInfoCmd.Model)).Trim();
-                        string display = TryGet(DeviceInfoCmd.DisplayName);
-                        bool matches =
-                            string.Equals(combined, cameraModel, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(display,  cameraModel, StringComparison.OrdinalIgnoreCase);
-                        if (matches)
-                        {
-                            if (current == index)
-                            {
-                                var device = iface.OpenDevice(devId, flags);
-                                return (ifaceId, devId, iface, device);
-                            }
-                            current++;
-                        }
-                    }
-                }
-                catch
-                {
-                    iface.Dispose();
-                    throw;
-                }
-                iface.Dispose();
-            }
-            throw new InvalidOperationException(
-                $"Camera '{cameraModel}' at index {index} not found ({current} matching device(s) visible).");
+                    string TryGet(DeviceInfoCmd cmd)
+                    { try { return iface.GetDeviceInfoString(devId, cmd); } catch { return string.Empty; } }
+                    string combined = (TryGet(DeviceInfoCmd.Vendor) + " " + TryGet(DeviceInfoCmd.Model)).Trim();
+                    string display = TryGet(DeviceInfoCmd.DisplayName);
+                    bool matches =
+                        string.Equals(combined, cameraModel, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(display,  cameraModel, StringComparison.OrdinalIgnoreCase);
+                    return matches && current++ == index;
+                },
+                flags,
+                () => new InvalidOperationException($"Camera '{cameraModel}' at index {index} not found ({current} matching device(s) visible)."));
         }
 
-        public void Dispose()
-        {
-            if (_handle != IntPtr.Zero)
-            {
-                _api.TLClose(_handle);
-                _handle = IntPtr.Zero;
-            }
-        }
+        protected override void CloseHandle() => _api.TLClose(_handle);
     }
 }
