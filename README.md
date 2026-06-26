@@ -74,7 +74,15 @@ At workflow start, the device is selected in this order:
 2. **CameraModel set** — search producers, filter by `"Vendor Model"` string, pick by `DeviceIndex` within the matching set; error if no match or index out of range
 3. **Neither** — global `DeviceIndex` across all producers (the default behaviour)
 
-> **Multi-producer caveat:** when more than one GenTL producer is installed, the global device index is not stable across opens — it can resolve to a different physical camera each time. Pin by `SerialNumber` to test or run against one specific camera reliably.
+#### `DeviceIndex` is not a stable identifier — prefer `SerialNumber`
+
+`DeviceIndex` is a *position* in the enumerated device list, not an identity. The same index can resolve to a **different physical camera** between runs (or even between two opens moments apart), with no error raised. This is inherent to how GenTL enumeration plus real hardware behave — it is not a bug. It happens when:
+
+- **Multiple GenTL producers are installed** — the global index spans all producers, and a still-busy / not-yet-released device shifts the ordering (e.g. an IDS uEye that's slow to release can push index `0` onto a different vendor's camera on the next open).
+- **A camera is unplugged / replugged**, or cameras **power on in a different order** — the device that was index `1` yesterday may be index `0` today.
+- **A producer re-enumerates** its devices in a different order between sessions.
+
+**Recommendation: pin by `SerialNumber`** (or `CameraModel`) for any workflow that must reliably target one specific camera. Identity-based selection is stable across all of the above. Use `EnumerateDevices` (or the `SerialNumber` dropdown in the editor) to discover the serials of connected cameras. Reserve bare `DeviceIndex` for single-camera, single-producer setups where position is unambiguous.
 
 #### Feature overrides
 
