@@ -41,7 +41,7 @@
     <PackageLicenseSourcePath>$(MSBuildThisFileDirectory)../LICENSE</PackageLicenseSourcePath>
 
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReadmeSourcePath>$(MSBuildThisFileDirectory)../README.md</PackageReadmeSourcePath>
+    <PackageReadmeSourcePath>$(MSBuildThisFileDirectory)../docs/README.md</PackageReadmeSourcePath>
     <PackageReadmeSourcePath Condition="Exists('$(MSBuildThisFileDirectory)README.nuget.md')">$(MSBuildThisFileDirectory)README.nuget.md</PackageReadmeSourcePath>
     <PackageReadmeSourcePath Condition="Exists('$(MSBuildProjectDirectory)\README.md')">$(MSBuildProjectDirectory)\README.md</PackageReadmeSourcePath>
     <PackageReadmeSourcePath Condition="Exists('$(MSBuildProjectDirectory)\README.nuget.md')">$(MSBuildProjectDirectory)\README.nuget.md</PackageReadmeSourcePath>

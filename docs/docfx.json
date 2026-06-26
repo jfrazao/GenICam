@@ -52,7 +52,7 @@
       "template"
     ],
     "sitemap": {
-      "baseUrl": "https://bonsai-rx.org/bonsai-genicam"
+      "baseUrl": "https://bonsai-rx.org/genicam"
     },
     "globalMetadata": {
       "_appName": "Bonsai.GenICam",
