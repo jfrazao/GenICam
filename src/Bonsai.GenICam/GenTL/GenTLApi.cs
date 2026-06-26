@@ -248,28 +248,6 @@ namespace Bonsai.GenICam.GenTL
             // else: already initialized from a previous load — skip GCInitLib
         }
 
-        // Delegate for the two-call string-fetching pattern used throughout GenTL.
-        internal delegate int StringGetter(byte[] buf, ref UIntPtr size);
-
-        // Reads a null-terminated ASCII string by first probing for size then filling.
-        internal static string FetchStringRef(StringGetter getter)
-        {
-            var size = new UIntPtr(256);
-            var buf = new byte[256];
-            int err = getter(buf, ref size);
-            if (err == (int)GCError.GC_ERR_BUFFER_TOO_SMALL)
-            {
-                buf = new byte[(int)size];
-                GenTLException.Check(getter(buf, ref size));
-            }
-            else
-            {
-                GenTLException.Check(err);
-            }
-            int len = Array.IndexOf(buf, (byte)0);
-            return Encoding.ASCII.GetString(buf, 0, len < 0 ? buf.Length : len);
-        }
-
         private T Bind<T>(string name) where T : Delegate
         {
             var ptr = NativeMethods.GetProcAddress(_module, name);
