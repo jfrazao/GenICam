@@ -103,7 +103,7 @@ namespace Bonsai.GenICam
                 var ctx = OpenDevice();
                 try
                 {
-                    var map = new NodeMap(ctx.Api, ctx.Port);
+                    var map = ctx.NodeMap;
                     _liveNodeMap = map;
 
                     var cancel = new CancellationTokenSource();
@@ -327,36 +327,12 @@ namespace Bonsai.GenICam
             }
         }
 
-        private GenICamDeviceContext OpenDevice()
-        {
-            var path   = string.IsNullOrWhiteSpace(ProducerPath) ? null : ProducerPath;
-            var serial = string.IsNullOrWhiteSpace(SerialNumber)  ? null : SerialNumber;
-            var model  = string.IsNullOrWhiteSpace(CameraModel)   ? null : CameraModel;
-            if (serial != null || model != null)
-            {
-                var (api, system, iface, device) = GenTLLoader.FindAndOpenDeviceAcrossProducers(
-                    serial, model, DeviceIndex, path, DeviceAccessFlags.Control);
-                return new GenICamDeviceContext(api, system, iface, device);
-            }
-            var (a, localIndex) = GenTLLoader.ResolveAndLoad(path, DeviceIndex);
-            GenTLSystem? sys = null;
-            try
-            {
-                sys = new GenTLSystem(a);
-                var (_, _, ifc, dev) = sys.FindAndOpenDevice(localIndex);
-                return new GenICamDeviceContext(a, sys, ifc, dev);
-            }
-            catch
-            {
-                sys?.Dispose();
-                a.Dispose();
-                throw;
-            }
-        }
+        private DeviceSession OpenDevice() =>
+            DeviceSession.Open(ProducerPath, DeviceIndex, CameraModel, SerialNumber, DeviceAccessFlags.Control);
 
         private sealed class AcqState
         {
-            internal GenICamDeviceContext Ctx = null!;
+            internal DeviceSession Ctx = null!;
             internal NodeMap Map = null!;
             internal int NumBuffers;
             internal uint FrameTimeoutMs;
@@ -365,35 +341,7 @@ namespace Bonsai.GenICam
             internal CancellationTokenSource Cancel = null!;
             internal IObserver<GenICamMessage> Observer = null!;
             internal volatile GenTLDataStream? Stream;
-            internal volatile GenICamDeviceContext? CtxToClose;
-        }
-    }
-
-    internal sealed class GenICamDeviceContext : IDisposable
-    {
-        internal readonly GenTLApi Api;
-        internal readonly IntPtr Port;
-        private readonly GenTLSystem _system;
-        private readonly GenTLInterface _iface;
-        private readonly GenTLDevice _device;
-
-        internal GenICamDeviceContext(GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device)
-        {
-            Api = api;
-            _system = system;
-            _iface = iface;
-            _device = device;
-            Port = device.GetPort();
-        }
-
-        internal GenTLDataStream OpenDataStream() => _device.OpenDataStream();
-
-        public void Dispose()
-        {
-            _device.Dispose();
-            _iface.Dispose();
-            _system.Dispose();
-            Api.Dispose();
+            internal volatile DeviceSession? CtxToClose;
         }
     }
 

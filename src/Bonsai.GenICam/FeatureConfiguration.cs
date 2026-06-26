@@ -172,7 +172,7 @@ namespace Bonsai.GenICam
         private int _valueColumnIndex;
         private int _overrideColumnIndex;
         private List<FeatureDisplayEntry> _displayEntries = new List<FeatureDisplayEntry>();
-        private DeviceContext? _designContext;
+        private DeviceSession? _designContext;
 
         internal FeatureConfiguration Configuration { get; }
 
@@ -352,7 +352,7 @@ namespace Bonsai.GenICam
 
         private void RefreshFromDevice()
         {
-            var map = _source.LiveNodeMap ?? _designContext?.Map;
+            var map = _source.LiveNodeMap ?? _designContext?.NodeMap;
             if (map == null)
             {
                 ShowOverridesOnly();
@@ -687,7 +687,7 @@ namespace Bonsai.GenICam
 
         private void WriteLiveOrDesign(FeatureDisplayEntry entry, string value)
         {
-            var map = _source.LiveNodeMap ?? _designContext?.Map;
+            var map = _source.LiveNodeMap ?? _designContext?.NodeMap;
             if (map == null)
             {
                 // No camera — just update override list so the value is persisted
@@ -777,77 +777,16 @@ namespace Bonsai.GenICam
 
         private void ExecuteCommandNode(FeatureDisplayEntry entry)
         {
-            var map = _source.LiveNodeMap ?? _designContext?.Map;
+            var map = _source.LiveNodeMap ?? _designContext?.NodeMap;
             if (map == null) { MessageBox.Show(this, "Camera not connected.", "Feature Editor", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             try { map.Write(entry.Name, ""); }
             catch (Exception ex) { MessageBox.Show(this, $"Failed to execute '{entry.Name}':\n{ex.Message}", "Feature Editor", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
 
-        private DeviceContext OpenDevice()
-        {
-            var path = string.IsNullOrWhiteSpace(_source.ProducerPath) ? null : _source.ProducerPath;
-            var (api, localIndex) = GenTLLoader.ResolveAndLoad(path, _source.DeviceIndex);
-            GenTLSystem? system = null;
-            try
-            {
-                system = new GenTLSystem(api);
-
-                (string ifaceId, string devId, GenTLInterface iface, GenTLDevice device) t;
-                if (!string.IsNullOrEmpty(_source.SerialNumber))
-                    t = system.FindAndOpenDeviceBySerial(_source.SerialNumber!, DeviceAccessFlags.Control);
-                else if (!string.IsNullOrEmpty(_source.CameraModel))
-                    t = system.FindAndOpenDeviceByModel(_source.CameraModel!, localIndex, DeviceAccessFlags.Control);
-                else
-                    t = system.FindAndOpenDevice(localIndex, DeviceAccessFlags.Control);
-
-                string TryGet(DeviceInfoCmd cmd)
-                { try { return t.iface.GetDeviceInfoString(t.devId, cmd); } catch { return string.Empty; } }
-
-                var info = new DeviceInfo
-                {
-                    GlobalIndex   = _source.DeviceIndex,
-                    ID            = t.devId,
-                    InterfaceID   = t.ifaceId,
-                    ProducerPath  = api.ProducerPath,
-                    Vendor        = TryGet(DeviceInfoCmd.Vendor),
-                    Model         = TryGet(DeviceInfoCmd.Model),
-                    SerialNumber  = TryGet(DeviceInfoCmd.SerialNumber),
-                    TLType        = TryGet(DeviceInfoCmd.TLType),
-                    DisplayName   = TryGet(DeviceInfoCmd.DisplayName)
-                };
-                var map = new NodeMap(api, t.device.GetPort());
-                return new DeviceContext(api, system, t.iface, t.device, map, info);
-            }
-            catch
-            {
-                system?.Dispose();
-                api.Dispose();
-                throw;
-            }
-        }
-
-        private sealed class DeviceContext : IDisposable
-        {
-            internal NodeMap Map { get; }
-            internal DeviceInfo Info { get; }
-            private readonly GenTLApi _api;
-            private readonly GenTLSystem _system;
-            private readonly GenTLInterface _iface;
-            private readonly GenTLDevice _device;
-
-            internal DeviceContext(GenTLApi api, GenTLSystem system, GenTLInterface iface, GenTLDevice device, NodeMap map, DeviceInfo info)
-            {
-                _api = api; _system = system; _iface = iface; _device = device;
-                Map = map; Info = info;
-            }
-
-            public void Dispose()
-            {
-                _device.Dispose();
-                _iface.Dispose();
-                _system.Dispose();
-                _api.Dispose();
-            }
-        }
+        // Design-time connection uses the same selection priority as the running GenICamDevice
+        // (serial → model+index → index, across producers), so the editor previews the same camera
+        // the workflow will open.
+        private DeviceSession OpenDevice() =>
+            DeviceSession.Open(_source.ProducerPath, _source.DeviceIndex, _source.CameraModel, _source.SerialNumber, DeviceAccessFlags.Control);
     }
 }
