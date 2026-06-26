@@ -19,7 +19,7 @@ namespace Bonsai.GenICam.GenTL
             for (uint i = 0; i < count; i++)
             {
                 uint idx = i;
-                ids[i] = GenTLApi.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
+                ids[i] = GenTLMarshal.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
                     return _api.IFGetDeviceID(_handle, idx, buf, ref sz);
                 });
             }
@@ -34,7 +34,7 @@ namespace Bonsai.GenICam.GenTL
 
             if (_api.IFGetDeviceInfo != null)
             {
-                return GenTLApi.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
+                return GenTLMarshal.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
                     return _api.IFGetDeviceInfo(_handle, idBytes, (uint)cmd, out _, buf, ref sz);
                 });
             }
@@ -43,7 +43,7 @@ namespace Bonsai.GenICam.GenTL
             GenTLException.Check(_api.IFOpenDevice(_handle, idBytes, (uint)DeviceAccessFlags.ReadOnly, out IntPtr hDev));
             try
             {
-                return GenTLApi.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
+                return GenTLMarshal.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
                     return _api.DevGetInfo(hDev, (uint)cmd, out _, buf, ref sz);
                 });
             }
