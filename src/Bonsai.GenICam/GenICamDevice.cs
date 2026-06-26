@@ -1,7 +1,6 @@
 using System;
 using System.ComponentModel;
 using System.Drawing.Design;
-using System.Globalization;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive;
@@ -223,17 +222,9 @@ namespace Bonsai.GenICam
 
         internal static GenICamMessage TryRead(NodeMap map, string name)
         {
-            try { return GenICamMessage.Response(name, FormatValue(map.Read(name))); }
+            try { return GenICamMessage.Response(name, map.Read(name).ToPayloadString()); }
             catch (Exception ex) { return GenICamMessage.Error(name, ex.Message); }
         }
-
-        private static string FormatValue(FeatureValue v) => v.Value switch
-        {
-            double d => d.ToString(CultureInfo.InvariantCulture),
-            long   l => l.ToString(CultureInfo.InvariantCulture),
-            bool   b => b ? "True" : "False",
-            _        => v.Value?.ToString() ?? string.Empty
-        };
 
         [HandleProcessCorruptedStateExceptions]
         private static void RunAcquisition(AcqState s)
