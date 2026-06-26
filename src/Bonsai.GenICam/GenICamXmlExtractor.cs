@@ -55,7 +55,7 @@ namespace Bonsai.GenICam
 
         internal static string FetchXml(GenTLApi api, IntPtr port)
         {
-            string url = GenTLApi.FetchStringRef(delegate (byte[] buf, ref UIntPtr sz)
+            string url = GenTLMarshal.FetchStringRef(delegate (byte[] buf, ref UIntPtr sz)
             {
                 return api.GCGetPortURL(port, buf, ref sz);
             });

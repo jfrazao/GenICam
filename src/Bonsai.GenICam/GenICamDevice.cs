@@ -302,27 +302,9 @@ namespace Bonsai.GenICam
             try
             {
                 object v = map.Read("PixelFormat").Value;
-                return PixelFormatNameToCode(v is string s ? s : v?.ToString() ?? string.Empty);
+                return PixelFormat.NameToCode(v is string s ? s : v?.ToString() ?? string.Empty);
             }
             catch { return 0; }
-        }
-
-        private static ulong PixelFormatNameToCode(string name)
-        {
-            switch (name)
-            {
-                case "Mono8":    return 0x01080001;
-                case "Mono10":   return 0x01100003;
-                case "Mono12":   return 0x01100005;
-                case "Mono16":   return 0x01100007;
-                case "RGB8":     return 0x02180014;
-                case "BGR8":     return 0x02180015;
-                case "BayerGR8": return 0x01080008;
-                case "BayerRG8": return 0x01080009;
-                case "BayerGB8": return 0x0108000A;
-                case "BayerBG8": return 0x0108000B;
-                default:         return 0;
-            }
         }
 
         private DeviceSession OpenDevice() =>

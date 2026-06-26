@@ -19,7 +19,7 @@ namespace Bonsai.GenICam.GenTL
             for (uint i = 0; i < count; i++)
             {
                 uint idx = i;
-                ids[i] = GenTLApi.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
+                ids[i] = GenTLMarshal.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
                     return _api.TLGetInterfaceID(_handle, idx, buf, ref sz);
                 });
             }
