@@ -88,20 +88,7 @@ namespace Bonsai.GenICam.GenApi
                         if (string.IsNullOrEmpty(entryName)) continue;
                         var entryAm = ParseAccessMode((string)entry.Element(ns + "AccessMode") ?? (string)entry.Attribute("AccessMode") ?? "RW");
                         bool entryUnsigned = !string.Equals((string)entry.Element(ns + "Sign"), "Signed", StringComparison.OrdinalIgnoreCase);
-                        string? bitStr = (string)entry.Element(ns + "Bit");
-                        ulong entryMask; int entryShift;
-                        if (bitStr != null)
-                        {
-                            string bt = bitStr.Trim();
-                            int bit = bt.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                                ? (int)Convert.ToUInt32(bt, 16) : int.Parse(bt);
-                            entryMask = 1UL << bit; entryShift = bit;
-                        }
-                        else
-                        {
-                            entryMask = ParseULong(entry, ns, "Mask", ulong.MaxValue);
-                            entryShift = ParseInt(entry, ns, "Shift", 0);
-                        }
+                        var (entryMask, entryShift) = ParseBitMaskShift(entry, ns);
                         var entryNode = new MaskedIntRegNode
                         {
                             Name = entryName, AccessMode = entryAm,
@@ -171,21 +158,7 @@ namespace Bonsai.GenICam.GenApi
 
                 case "MaskedIntReg":
                 {
-                    // GenICam allows <Bit>n</Bit> as shorthand for <Mask>1<<n</Mask> <Shift>n</Shift>
-                    string bitStr = (string)el.Element(ns + "Bit");
-                    ulong mask; int shift;
-                    if (bitStr != null)
-                    {
-                        string bitTrimmed = bitStr.Trim();
-                        int bit = bitTrimmed.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                            ? (int)Convert.ToUInt32(bitTrimmed, 16) : int.Parse(bitTrimmed);
-                        mask = 1UL << bit; shift = bit;
-                    }
-                    else
-                    {
-                        mask = ParseULong(el, ns, "Mask", ulong.MaxValue);
-                        shift = ParseInt(el, ns, "Shift", 0);
-                    }
+                    var (mask, shift) = ParseBitMaskShift(el, ns);
                     return new MaskedIntRegNode
                     {
                         Name = name,
@@ -423,14 +396,15 @@ namespace Bonsai.GenICam.GenApi
         // AutofeatureAvailableReg bitmask is 0). Features remain visible in the editor
         // as read-only rather than disappearing.
         private bool IsNodeAvailable(NodeBase node)
+            => GuardPasses(node.PIsImplemented) && GuardPasses(node.PIsAvailable);
+
+        // A pIsImplemented / pIsAvailable guard passes when it is absent, or resolves to a non-zero
+        // value. A reference that resolves to 0 — or fails to resolve — fails the guard.
+        private bool GuardPasses(string? pRef)
         {
-            if (node.PIsImplemented != null)
-                try { if (Convert.ToInt64(ReadNode(Resolve(node.PIsImplemented))) == 0) return false; }
-                catch { return false; }
-            if (node.PIsAvailable != null)
-                try { if (Convert.ToInt64(ReadNode(Resolve(node.PIsAvailable))) == 0) return false; }
-                catch { return false; }
-            return true;
+            if (pRef == null) return true;
+            try { return Convert.ToInt64(ReadNode(Resolve(pRef))) != 0; }
+            catch { return false; }
         }
 
         // Traverses the pValue chain to the terminal register node so that a logical
@@ -573,8 +547,7 @@ namespace Bonsai.GenICam.GenApi
         {
             FloatNode n        => n.PValue,
             IntegerNode n      => n.ConstantValue.HasValue ? null : n.PValue,
-            ConverterNode n    => n.PValue,
-            IntConverterNode n => n.PValue,
+            ConverterNodeBase n => n.PValue,
             EnumerationNode n  => n.PValue,
             BooleanNode n      => n.PValue,
             StringNode n       => n.PValue,
@@ -607,13 +580,7 @@ namespace Bonsai.GenICam.GenApi
         private bool IsEnumEntryAvailable(EnumerationNode en, string entryName)
         {
             if (!en.EntryGuards.TryGetValue(entryName, out var guards)) return true;
-            if (guards.PIsImplemented != null)
-                try { if (Convert.ToInt64(ReadNode(Resolve(guards.PIsImplemented))) == 0) return false; }
-                catch { return false; }
-            if (guards.PIsAvailable != null)
-                try { if (Convert.ToInt64(ReadNode(Resolve(guards.PIsAvailable))) == 0) return false; }
-                catch { return false; }
-            return true;
+            return GuardPasses(guards.PIsImplemented) && GuardPasses(guards.PIsAvailable);
         }
 
         internal IEnumerable<string> GetCommandNodeNames()
@@ -659,7 +626,7 @@ namespace Bonsai.GenICam.GenApi
                     try
                     {
                         var next = Resolve(f.PValue);
-                        if (next is ConverterNode || next is IntConverterNode)
+                        if (next is ConverterNodeBase)
                         {
                             // HikRobot (MV-CA013): Float declares no pMin/pMax. Limits live on the
                             // Integer node that backs the Converter, in raw register units (ADC counts,
@@ -668,13 +635,10 @@ namespace Bonsai.GenICam.GenApi
                             // FLIR/IDS skip this block because their pMin/pMax are already set above.
                             if (!min.HasValue || !max.HasValue)
                             {
-                                string? cvPValue;
-                                string cvFTo;
-                                Dictionary<string, string> cvVars;
-                                if (next is ConverterNode cvC)
-                                { cvPValue = cvC.PValue; cvFTo = cvC.FormulaTo ?? "FROM"; cvVars = cvC.Variables; }
-                                else
-                                { var icv = (IntConverterNode)next; cvPValue = icv.PValue; cvFTo = icv.FormulaTo ?? "FROM"; cvVars = icv.Variables; }
+                                var cv = (ConverterNodeBase)next;
+                                string? cvPValue = cv.PValue;
+                                string cvFTo = cv.FormulaTo ?? "FROM";
+                                Dictionary<string, string> cvVars = cv.Variables;
                                 if (cvPValue != null)
                                 {
                                     try
@@ -712,7 +676,7 @@ namespace Bonsai.GenICam.GenApi
                 return (min, max, step);
             }
             // Converter nodes change unit space — limits below them are meaningless in user units.
-            if (node is ConverterNode || node is IntConverterNode) return (null, null, null);
+            if (node is ConverterNodeBase) return (null, null, null);
             string? pv = NodePValue(node);
             if (pv != null)
             {
@@ -796,19 +760,13 @@ namespace Bonsai.GenICam.GenApi
                     var vars = ResolveFormulaVarsFromChunk(n.Variables, bytes);
                     return (long)EvaluateFormula(n.Formula, vars);
                 }
-                case ConverterNode n:
+                case ConverterNodeBase n:
                 {
                     double from = Convert.ToDouble(ReadNodeFromChunk(ResolveRef(n.PValue), bytes));
                     var vars = ResolveConverterVars(n.Variables);
                     vars["FROM"] = from;
-                    return EvaluateFormula(n.FormulaTo, vars);
-                }
-                case IntConverterNode n:
-                {
-                    double from = Convert.ToDouble(ReadNodeFromChunk(ResolveRef(n.PValue), bytes));
-                    var vars = ResolveConverterVars(n.Variables);
-                    vars["FROM"] = from;
-                    return (long)EvaluateFormula(n.FormulaTo, vars);
+                    double result = EvaluateFormula(n.FormulaTo, vars);
+                    return n is IntConverterNode ? (object)(long)result : (object)result;
                 }
                 default:
                     throw new NotSupportedException($"ReadChunk: unsupported node type {node.GetType().Name}");
@@ -874,13 +832,22 @@ namespace Bonsai.GenICam.GenApi
             return null;
         }
 
-        private static string? GetNodePPort(NodeBase node) => node switch
+        private static string? GetNodePPort(NodeBase node) => node is IRegisterNode reg ? reg.PPort : null;
+
+        // GenICam allows <Bit>n</Bit> as shorthand for <Mask>1<<n</Mask> + <Shift>n</Shift>;
+        // otherwise read explicit <Mask>/<Shift>. Shared by the MaskedIntReg and StructEntry parsers.
+        private static (ulong mask, int shift) ParseBitMaskShift(XElement el, XNamespace ns)
         {
-            IntRegNode r    => r.PPort,
-            FloatRegNode r  => r.PPort,
-            StringRegNode r => r.PPort,
-            _ => null
-        };
+            string? bitStr = (string)el.Element(ns + "Bit");
+            if (bitStr != null)
+            {
+                string bt = bitStr.Trim();
+                int bit = bt.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                    ? (int)Convert.ToUInt32(bt, 16) : int.Parse(bt);
+                return (1UL << bit, bit);
+            }
+            return (ParseULong(el, ns, "Mask", ulong.MaxValue), ParseInt(el, ns, "Shift", 0));
+        }
 
         // Like ResolveFormulaVars but reads from chunk bytes first, falling back to the
         // live register when a variable is not part of the chunk (e.g. a calibration constant).
@@ -929,13 +896,9 @@ namespace Bonsai.GenICam.GenApi
                     // Detect inverted Converter formulas: some cameras (e.g. IDS) accidentally swap
                     // FormulaTo/FormulaFrom. Detect by checking if the FormulaTo result lands way
                     // outside the node's declared pMin/pMax limits, then try FormulaFrom instead.
-                    if ((inner is ConverterNode || inner is IntConverterNode) && (n.PMin != null || n.PMax != null))
+                    if (inner is ConverterNodeBase cv && (n.PMin != null || n.PMax != null))
                     {
-                        string? cvPValue; string cvFTo; string cvFFrom; Dictionary<string, string> cvVars;
-                        if (inner is ConverterNode cvC)
-                        { cvPValue = cvC.PValue; cvFTo = cvC.FormulaTo ?? "FROM"; cvFFrom = cvC.FormulaFrom ?? "TO"; cvVars = cvC.Variables; }
-                        else
-                        { var icv = (IntConverterNode)inner; cvPValue = icv.PValue; cvFTo = icv.FormulaTo ?? "FROM"; cvFFrom = icv.FormulaFrom ?? "TO"; cvVars = icv.Variables; }
+                        string? cvPValue = cv.PValue; string cvFTo = cv.FormulaTo ?? "FROM"; string cvFFrom = cv.FormulaFrom ?? "TO"; Dictionary<string, string> cvVars = cv.Variables;
                         double raw = Convert.ToDouble(ReadNode(ResolveRef(cvPValue)));
                         var fvars = ResolveConverterVars(cvVars);
                         fvars["FROM"] = raw;
@@ -981,19 +944,13 @@ namespace Bonsai.GenICam.GenApi
                     var vars = ResolveFormulaVars(n.Variables);
                     return EvaluateFormula(n.Formula, vars);
                 }
-                case ConverterNode n:
+                case ConverterNodeBase n:
                 {
                     double from = Convert.ToDouble(ReadNode(ResolveRef(n.PValue)));
                     var vars = ResolveConverterVars(n.Variables);
                     vars["FROM"] = from;
-                    return EvaluateFormula(n.FormulaTo, vars);
-                }
-                case IntConverterNode n:
-                {
-                    double from = Convert.ToDouble(ReadNode(ResolveRef(n.PValue)));
-                    var vars = ResolveConverterVars(n.Variables);
-                    vars["FROM"] = from;
-                    return (long)EvaluateFormula(n.FormulaTo, vars);
+                    double result = EvaluateFormula(n.FormulaTo, vars);
+                    return n is IntConverterNode ? (object)(long)result : (object)result;
                 }
                 default:
                     throw new NotSupportedException($"Unsupported node type: {node.GetType().Name}");
@@ -1024,13 +981,9 @@ namespace Bonsai.GenICam.GenApi
                 case FloatNode n:
                 {
                     var inner = ResolveRef(n.PValue);
-                    if ((inner is ConverterNode || inner is IntConverterNode) && (n.PMin != null || n.PMax != null))
+                    if (inner is ConverterNodeBase cv && (n.PMin != null || n.PMax != null))
                     {
-                        string? cvPValue; string cvFTo; string cvFFrom; Dictionary<string, string> cvVars;
-                        if (inner is ConverterNode cvC)
-                        { cvPValue = cvC.PValue; cvFTo = cvC.FormulaTo ?? "FROM"; cvFFrom = cvC.FormulaFrom ?? "TO"; cvVars = cvC.Variables; }
-                        else
-                        { var icv = (IntConverterNode)inner; cvPValue = icv.PValue; cvFTo = icv.FormulaTo ?? "FROM"; cvFFrom = icv.FormulaFrom ?? "TO"; cvVars = icv.Variables; }
+                        string? cvPValue = cv.PValue; string cvFTo = cv.FormulaTo ?? "FROM"; string cvFFrom = cv.FormulaFrom ?? "TO"; Dictionary<string, string> cvVars = cv.Variables;
                         double? limMin = null, limMax = null;
                         if (n.PMin != null) try { limMin = Convert.ToDouble(ReadNode(Resolve(n.PMin))); } catch { }
                         if (n.PMax != null) try { limMax = Convert.ToDouble(ReadNode(Resolve(n.PMax))); } catch { }
@@ -1110,25 +1063,7 @@ namespace Bonsai.GenICam.GenApi
 
         // ---- register read/write ----
 
-        private ulong ResolveAddress(IntRegNode r)
-        {
-            ulong addr = r.Address;
-            if (r.PAddresses != null)
-                foreach (string pa in r.PAddresses)
-                    addr += (ulong)Convert.ToInt64(ReadNode(Resolve(pa)));
-            return addr;
-        }
-
-        private ulong ResolveAddressFloat(FloatRegNode r)
-        {
-            ulong addr = r.Address;
-            if (r.PAddresses != null)
-                foreach (string pa in r.PAddresses)
-                    addr += (ulong)Convert.ToInt64(ReadNode(Resolve(pa)));
-            return addr;
-        }
-
-        private ulong ResolveAddressString(StringRegNode r)
+        private ulong ResolveAddress(IRegisterNode r)
         {
             ulong addr = r.Address;
             if (r.PAddresses != null)
@@ -1153,7 +1088,7 @@ namespace Bonsai.GenICam.GenApi
 
         private double ReadFloatReg(FloatRegNode r)
         {
-            ulong address = ResolveAddressFloat(r);
+            ulong address = ResolveAddress(r);
             var buf = ReadPort(address, r.Length);
             return r.Length == 4
                 ? BitConverter.ToSingle(r.LittleEndian ? buf : Reverse(buf), 0)
@@ -1162,7 +1097,7 @@ namespace Bonsai.GenICam.GenApi
 
         private string ReadStringReg(StringRegNode r)
         {
-            ulong address = ResolveAddressString(r);
+            ulong address = ResolveAddress(r);
             int length = r.PLength != null ? (int)Convert.ToInt64(ReadNode(Resolve(r.PLength))) : r.Length;
             var buf = ReadPort(address, length);
             int len = Array.IndexOf(buf, (byte)0);
@@ -1185,7 +1120,7 @@ namespace Bonsai.GenICam.GenApi
 
         private void WriteFloatReg(FloatRegNode r, double value)
         {
-            ulong address = ResolveAddressFloat(r);
+            ulong address = ResolveAddress(r);
             byte[] buf = r.Length == 4
                 ? BitConverter.GetBytes((float)value)
                 : BitConverter.GetBytes(value);
@@ -1195,7 +1130,7 @@ namespace Bonsai.GenICam.GenApi
 
         private void WriteStringReg(StringRegNode r, string value)
         {
-            ulong address = ResolveAddressString(r);
+            ulong address = ResolveAddress(r);
             int length = r.PLength != null ? (int)Convert.ToInt64(ReadNode(Resolve(r.PLength))) : r.Length;
             var bytes = new byte[length];
             var encoded = Encoding.ASCII.GetBytes(value);

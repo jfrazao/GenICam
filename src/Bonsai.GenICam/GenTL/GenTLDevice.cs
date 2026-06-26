@@ -19,7 +19,7 @@ namespace Bonsai.GenICam.GenTL
             if (count == 0)
                 throw new InvalidOperationException("Device exposes no data streams.");
 
-            var streamId = GenTLApi.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
+            var streamId = GenTLMarshal.FetchStringRef(delegate(byte[] buf, ref UIntPtr sz) {
                 return _api.DevGetDataStreamID(_handle, 0, buf, ref sz);
             });
 
