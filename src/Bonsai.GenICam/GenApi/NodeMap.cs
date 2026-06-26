@@ -475,9 +475,6 @@ namespace Bonsai.GenICam.GenApi
         internal string GetNodeDescription(string name)
             => _nodes.TryGetValue(name, out var node) ? node.Description ?? "" : "";
 
-        internal string? GetNodeToolTip(string name)
-            => _nodes.TryGetValue(name, out var node) ? node.ToolTip : null;
-
         internal NodeVisibility GetNodeVisibility(string name)
             => _nodes.TryGetValue(name, out var node) ? node.Visibility : NodeVisibility.Beginner;
 
@@ -497,6 +494,12 @@ namespace Bonsai.GenICam.GenApi
         {
             if (!_nodes.TryGetValue(name, out var node)) return null;
             return FindDisplayPrecision(node);
+        }
+
+        internal NodeDisplayNotation GetNodeDisplayNotation(string name)
+        {
+            if (!_nodes.TryGetValue(name, out var node)) return NodeDisplayNotation.Automatic;
+            return FindDisplayNotation(node);
         }
 
         private string? FindUnit(NodeBase node)
@@ -524,6 +527,15 @@ namespace Bonsai.GenICam.GenApi
             string? pv = NodePValue(node);
             if (pv != null) { try { return FindDisplayPrecision(Resolve(pv)); } catch { } }
             return null;
+        }
+
+        private NodeDisplayNotation FindDisplayNotation(NodeBase node)
+        {
+            if (node is IntegerNode i) return i.DisplayNotation;
+            if (node is FloatNode f)   return f.DisplayNotation;
+            string? pv = NodePValue(node);
+            if (pv != null) { try { return FindDisplayNotation(Resolve(pv)); } catch { } }
+            return NodeDisplayNotation.Automatic;
         }
 
         internal FeatureKind GetNodeKind(string name)

@@ -90,6 +90,7 @@ namespace Bonsai.GenICam
         internal FeatureKind Kind { get; set; }
         internal NodeVisibility Visibility { get; set; } = NodeVisibility.Beginner;
         internal NodeRepresentation Representation { get; set; } = NodeRepresentation.Linear;
+        internal NodeDisplayNotation Notation { get; set; } = NodeDisplayNotation.Automatic;
         internal int DecimalPlaces { get; set; }
         internal IReadOnlyList<string>? EnumEntries { get; set; }
         internal double? MinValue { get; set; }
@@ -103,7 +104,8 @@ namespace Bonsai.GenICam
             Writable = writable;
         }
 
-        internal static string? ValueToString(object? value, NodeRepresentation rep = NodeRepresentation.Linear, int decimalPlaces = -1)
+        internal static string? ValueToString(object? value, NodeRepresentation rep = NodeRepresentation.Linear,
+            int decimalPlaces = -1, NodeDisplayNotation notation = NodeDisplayNotation.Automatic)
         {
             if (rep == NodeRepresentation.HexNumber)
             {
@@ -111,17 +113,23 @@ namespace Bonsai.GenICam
                 if (value is int i)    return $"0x{i:X}";
                 if (value is double dh) return $"0x{(long)Math.Round(dh):X}";
             }
-            if (value is double d)
+            if (value is double || value is float)
             {
-                if (decimalPlaces == 0) return ((long)Math.Round(d)).ToString();
-                if (decimalPlaces > 0)  return Math.Round(d, decimalPlaces).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            }
-            if (value is float f)
-            {
-                if (decimalPlaces == 0) return ((long)Math.Round(f)).ToString();
-                if (decimalPlaces > 0)  return Math.Round(f, decimalPlaces).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                double d = value is double dd ? dd : (float)value;
+                var ic = System.Globalization.CultureInfo.InvariantCulture;
+                switch (notation)
+                {
+                    // Honor the GenICam DisplayNotation: fixed-point or scientific, using DisplayPrecision
+                    // as the digit count when the node declares one.
+                    case NodeDisplayNotation.Fixed:
+                        return decimalPlaces >= 0 ? d.ToString("F" + decimalPlaces, ic) : d.ToString("F", ic);
+                    case NodeDisplayNotation.Exponential:
+                        return decimalPlaces >= 0 ? d.ToString("E" + decimalPlaces, ic) : d.ToString("E", ic);
+                    default: // Automatic
+                        if (decimalPlaces == 0) return ((long)Math.Round(d)).ToString();
+                        if (decimalPlaces > 0)  return Math.Round(d, decimalPlaces).ToString(ic);
+                        return d.ToString(ic);
+                }
             }
             return value?.ToString();
         }
@@ -400,12 +408,13 @@ namespace Bonsai.GenICam
                 if (kind == FeatureKind.Integer || kind == FeatureKind.Float)
                 { var lim = map.GetNodeLimits(fv.Name); min = lim.min; max = lim.max; step = lim.step; }
                 int dp = kind == FeatureKind.Integer ? 0 : (map.GetNodeDisplayPrecision(fv.Name) ?? 6);
+                var notation = map.GetNodeDisplayNotation(fv.Name);
 
-                var entry = new FeatureDisplayEntry(fv.Name, FeatureDisplayEntry.ValueToString(fv.Value, rep, dp), writable)
+                var entry = new FeatureDisplayEntry(fv.Name, FeatureDisplayEntry.ValueToString(fv.Value, rep, dp, notation), writable)
                 {
                     Category = category, Description = map.GetNodeDescription(fv.Name),
                     Kind = kind, Visibility = vis, Representation = rep, Unit = unit,
-                    DecimalPlaces = dp, EnumEntries = enumEntries,
+                    DecimalPlaces = dp, Notation = notation, EnumEntries = enumEntries,
                     MinValue = min, MaxValue = max, StepValue = step,
                     Overridden = Configuration.HasOverride(fv.Name)
                 };
@@ -701,7 +710,7 @@ namespace Bonsai.GenICam
             {
                 map.Write(entry.Name, value);
                 var confirmed = map.Read(entry.Name);
-                entry.DisplayValue = FeatureDisplayEntry.ValueToString(confirmed.Value, entry.Representation, entry.DecimalPlaces);
+                entry.DisplayValue = FeatureDisplayEntry.ValueToString(confirmed.Value, entry.Representation, entry.DecimalPlaces, entry.Notation);
                 Configuration.SetOverride(entry.Name, entry.DisplayValue ?? value);
                 entry.Overridden = true;
                 int ri = FindRowIndex(entry);
