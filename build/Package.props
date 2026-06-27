@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <PackageTags>$(PackageTags) GenICam GenTL Vision Camera</PackageTags>
-    <PackageProjectUrl>https://bonsai-rx.org/bonsai-genicam</PackageProjectUrl>
+    <PackageProjectUrl>https://bonsai-rx.org/genicam</PackageProjectUrl>
     <Authors>Bonsai Foundation</Authors>
     <Copyright>Copyright © Bonsai Foundation CIC and Contributors</Copyright>
   </PropertyGroup>
