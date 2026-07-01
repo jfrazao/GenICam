@@ -99,6 +99,16 @@ Buffer metadata (width, height, pixel format) from `DSGetBufferInfo`. Pixel form
 - `RGB8/BGR8` → 8-bit 3ch
 - `Mono16` → 16-bit 1ch
 
+### Frame buffer lifecycle and backpressure
+
+The GenTL buffer pool is **fixed** at `NumBuffers` (default 4): allocated once at `stream.Start(NumBuffers)` and never grown. Each frame is **copied** out (`Buffer.MemoryCopy` from the buffer's `BUFFER_INFO_BASE` into a freshly allocated `IplImage`) and the GenTL buffer is **re-queued immediately** — inside `WaitForFrame`, *before* the frame is handed downstream. Consequences:
+
+- **Holding images downstream is safe for the device.** A visualizer, ring buffer, `Take`, etc. holds an independent managed `IplImage`, not a device buffer — the buffer is already back in the pool. Cost is managed memory / GC pressure (one allocation + copy per frame), never device-buffer starvation.
+- **Delivery is synchronous on the acquisition thread** (`observer.OnNext` runs through `Observer.Synchronize` on that thread). If a downstream node *blocks* in `OnNext` (slow processing, not merely holding a reference), the thread cannot fetch the next buffer. The producer keeps filling the remaining queued buffers, and once all `NumBuffers` are full it **drops or overwrites** frames per its queue mode. The camera keeps streaming — there is no stall and no extra allocation, just dropped frames.
+- **Tuning:** raise `NumBuffers` to tolerate longer bursts/stalls, and/or decouple slow processing with an async boundary (e.g. `ObserveOn`, or a buffering/queue operator) so the acquisition thread stays free to drain buffers.
+
+This is a **copy**, not zero-copy: downstream never receives the raw GenTL buffer. That is a deliberate safety/simplicity tradeoff; zero-copy delivery (and GPU memory) is the open RFC in issue #4.
+
 ### GenAPI NodeMap
 
 1. `GCGetPortURL` → returns `"local:DeviceName.xml;address;length"` or `"file:..."` URL
