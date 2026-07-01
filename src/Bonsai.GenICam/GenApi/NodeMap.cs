@@ -440,10 +440,12 @@ namespace Bonsai.GenICam.GenApi
             // Formula-only nodes are always read-only
             if (node is IntSwissKnifeNode || node is SwissKnifeNode)
                 return false;
-            // Inline-<Value> enumerations (no <pValue>) have no backing register to write to;
-            // expose them read-only until a write path for node-level values is implemented.
+            // Inline-<Value> enumerations (no <pValue>): a selector (has <pSelected>) is writable —
+            // the write updates a client-side value that drives its governed features' addressing.
+            // A value-less enum that selects nothing has no register and no effect, so keep it
+            // read-only. (AccessMode RO/NA/NI already returned false above.)
             if (node is EnumerationNode en && en.PValue == null)
-                return false;
+                return en.PSelected.Count > 0;
             // Chain nodes: follow pValue to the terminal
             string? pv = NodePValue(node);
             if (pv != null)
@@ -474,6 +476,11 @@ namespace Bonsai.GenICam.GenApi
         // side effect of writing this node. Empty for non-selector nodes.
         internal IReadOnlyList<string> GetSelectedFeatures(string name)
             => _nodes.TryGetValue(name, out var node) ? node.PSelected : Array.Empty<string>();
+
+        // True when the node is an enumeration whose value is held inline (<Value>, no <pValue>).
+        // These are written client-side (WriteNode updates the stored value) rather than to a register.
+        internal bool IsInlineValueEnum(string name)
+            => _nodes.TryGetValue(name, out var node) && node is EnumerationNode e && e.PValue == null && e.ConstantValue.HasValue;
 
         internal NodeVisibility GetNodeVisibility(string name)
             => _nodes.TryGetValue(name, out var node) ? node.Visibility : NodeVisibility.Beginner;
@@ -1057,7 +1064,16 @@ namespace Bonsai.GenICam.GenApi
                     break;
                 case EnumerationNode n:
                 {
-                    if (n.Entries.TryGetValue(valueStr, out long enumVal))
+                    if (n.PValue == null && n.ConstantValue.HasValue)
+                    {
+                        // Inline-<Value> selector: no register to write. Update the client-side
+                        // value, which drives the pAddress/SwissKnife addressing of its pSelected
+                        // features (so their subsequent reads/writes hit the selected element).
+                        n.ConstantValue = n.Entries.TryGetValue(valueStr, out long sv)
+                            ? sv
+                            : (long)double.Parse(valueStr, System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    else if (n.Entries.TryGetValue(valueStr, out long enumVal))
                         WriteNode(ResolveRef(n.PValue), enumVal.ToString());
                     else
                         WriteNode(ResolveRef(n.PValue), valueStr); // allow raw int

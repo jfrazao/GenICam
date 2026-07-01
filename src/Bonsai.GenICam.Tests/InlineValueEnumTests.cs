@@ -39,11 +39,25 @@ namespace Bonsai.GenICam.Tests
         }
 
         [Fact]
-        public void InlineValueEnum_IsReadOnly()
+        public void InlineValueSelector_IsWritable()
         {
-            // No backing register, so it must not be offered as writable.
+            // A selector (has pSelected) is writable even without a register — the write is
+            // client-side and drives its governed features' addressing.
             var map = Load(Bfs);
-            Assert.False(map.CanWrite("TriggerSelector"));
+            Assert.True(map.CanWrite("TriggerSelector"));
+        }
+
+        [Fact]
+        public void WritingInlineValueSelector_UpdatesValueAndGovernedIndex()
+        {
+            var map = Load(Bfs);
+            // Default FrameStart (=3) → index 1.
+            Assert.Equal("FrameStart", (string)map.Read("TriggerSelector").Value);
+            Assert.Equal(1L, System.Convert.ToInt64(map.Read("TriggerSelectorValueToIndex").Value));
+            // Switch to AcquisitionStart (=2) → index 0, entirely client-side (no camera).
+            map.Write("TriggerSelector", "AcquisitionStart");
+            Assert.Equal("AcquisitionStart", (string)map.Read("TriggerSelector").Value);
+            Assert.Equal(0L, System.Convert.ToInt64(map.Read("TriggerSelectorValueToIndex").Value));
         }
     }
 }

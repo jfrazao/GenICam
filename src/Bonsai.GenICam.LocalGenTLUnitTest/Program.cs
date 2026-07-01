@@ -117,6 +117,10 @@ namespace Bonsai.GenICam.LocalGenTLUnitTest
             // instead of opening a separate connection per step, which some producers (e.g. IDS uEye)
             // cannot release fast enough between opens.
             ChunkDataTester.RunShared(producerPath, targetIndex, serialNumber);
+            Console.WriteLine();
+
+            // --- Selector-indexed write test (inline-<Value> selector, e.g. FLIR TriggerSelector) ---
+            SelectorIndexTester.Run(producerPath, targetIndex);
 
             Console.WriteLine("Test complete.");
         }
