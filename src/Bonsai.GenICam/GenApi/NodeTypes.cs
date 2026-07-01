@@ -18,6 +18,9 @@ namespace Bonsai.GenICam.GenApi
         public string? PIsImplemented { get; set; }
         public string? PIsAvailable { get; set; }
         public string? PIsLocked { get; set; }
+        // <pSelected> targets: features this node selects. Writing this node (a selector)
+        // changes the camera's internal pointer, so the listed features read back new values.
+        public List<string> PSelected { get; set; } = new List<string>();
     }
 
     // Register nodes hold an absolute address (plus optional <pAddress> offset refs) and an
@@ -115,6 +118,7 @@ namespace Bonsai.GenICam.GenApi
     internal class EnumerationNode : NodeBase
     {
         public string? PValue { get; set; }
+        public long? ConstantValue { get; set; }  // non-null when XML uses node-level <Value> instead of <pValue>
         public Dictionary<string, long> Entries { get; set; } = new Dictionary<string, long>();
         public Dictionary<long, string> SymbolicByValue { get; set; } = new Dictionary<long, string>();
         // Per-entry pIsImplemented / pIsAvailable guards; only entries with guards are stored.

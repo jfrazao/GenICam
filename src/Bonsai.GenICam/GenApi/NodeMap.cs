@@ -119,6 +119,7 @@ namespace Bonsai.GenICam.GenApi
                     node.PIsImplemented = ((string)el.Element(ns + "pIsImplemented"))?.Trim();
                     node.PIsAvailable   = ((string)el.Element(ns + "pIsAvailable"))?.Trim();
                     node.PIsLocked      = ((string)el.Element(ns + "pIsLocked"))?.Trim();
+                    node.PSelected      = ParsePSelected(el, ns);
                     _nodes[name] = node;
                 }
             }
@@ -135,6 +136,16 @@ namespace Bonsai.GenICam.GenApi
             foreach (var pa in el.Elements(ns + "pAddress"))
                 if (!string.IsNullOrEmpty(pa.Value)) list.Add(pa.Value.Trim());
             return list.Count > 0 ? list.ToArray() : null;
+        }
+
+        // <pSelected> children name the features this (selector) node governs. Writing the
+        // selector changes the camera's internal pointer, so those features read back new values.
+        private static List<string> ParsePSelected(XElement el, XNamespace ns)
+        {
+            var list = new List<string>();
+            foreach (var ps in el.Elements(ns + "pSelected"))
+                if (!string.IsNullOrEmpty(ps.Value)) list.Add(ps.Value.Trim());
+            return list;
         }
 
         private static NodeBase? ParseElement(XElement el, XNamespace ns, string name)
@@ -287,11 +298,17 @@ namespace Bonsai.GenICam.GenApi
                                 entryGuards[entryName] = (pImpl, pAvail);
                         }
                     }
+                    // Some cameras (e.g. FLIR TriggerSelector/BinningSelector) express the current
+                    // value as a node-level <Value> instead of a <pValue> register reference.
+                    // el.Element returns only the direct-child <Value>, never the nested EnumEntry ones.
+                    string enumPValue = (string)el.Element(ns + "pValue");
+                    string enumVal = (string)el.Element(ns + "Value");
                     return new EnumerationNode
                     {
                         Name = name,
                         AccessMode = accessMode,
-                        PValue = (string)el.Element(ns + "pValue"),
+                        PValue = enumPValue,
+                        ConstantValue = (enumPValue == null && enumVal != null) ? ParseLongLiteral(enumVal) : null,
                         Entries = entries,
                         SymbolicByValue = byValue,
                         EntryGuards = entryGuards
@@ -423,6 +440,10 @@ namespace Bonsai.GenICam.GenApi
             // Formula-only nodes are always read-only
             if (node is IntSwissKnifeNode || node is SwissKnifeNode)
                 return false;
+            // Inline-<Value> enumerations (no <pValue>) have no backing register to write to;
+            // expose them read-only until a write path for node-level values is implemented.
+            if (node is EnumerationNode en && en.PValue == null)
+                return false;
             // Chain nodes: follow pValue to the terminal
             string? pv = NodePValue(node);
             if (pv != null)
@@ -448,6 +469,11 @@ namespace Bonsai.GenICam.GenApi
 
         internal string GetNodeDescription(string name)
             => _nodes.TryGetValue(name, out var node) ? node.Description ?? "" : "";
+
+        // <pSelected> targets of a selector node: the features whose values change as a
+        // side effect of writing this node. Empty for non-selector nodes.
+        internal IReadOnlyList<string> GetSelectedFeatures(string name)
+            => _nodes.TryGetValue(name, out var node) ? node.PSelected : Array.Empty<string>();
 
         internal NodeVisibility GetNodeVisibility(string name)
             => _nodes.TryGetValue(name, out var node) ? node.Visibility : NodeVisibility.Beginner;
@@ -929,7 +955,9 @@ namespace Bonsai.GenICam.GenApi
                 case BooleanNode n: return Convert.ToInt64(ReadNode(ResolveRef(n.PValue))) != 0;
                 case EnumerationNode n:
                 {
-                    long val = Convert.ToInt64(ReadNode(ResolveRef(n.PValue)));
+                    long val = n.PValue == null && n.ConstantValue.HasValue
+                        ? n.ConstantValue.Value
+                        : Convert.ToInt64(ReadNode(ResolveRef(n.PValue)));
                     return n.SymbolicByValue.TryGetValue(val, out string sym) ? (object)sym : val;
                 }
                 case CommandNode _:
@@ -1287,6 +1315,19 @@ namespace Bonsai.GenICam.GenApi
 
         // ---- formula evaluation ----
 
+        // Numeric value of a node for formula / address arithmetic. Enumerations yield their
+        // integer value, not the symbolic string that ReadNode returns for display — otherwise a
+        // selector used as a SwissKnife variable (e.g. selector-indexed register addressing on FLIR)
+        // would fail to convert.
+        private double ReadNodeNumeric(NodeBase node)
+        {
+            if (node is EnumerationNode en)
+                return en.PValue == null && en.ConstantValue.HasValue
+                    ? en.ConstantValue.Value
+                    : Convert.ToInt64(ReadNode(ResolveRef(en.PValue)));
+            return Convert.ToDouble(ReadNode(node));
+        }
+
         // Resolves pVariable references for Converter/IntConverter nodes.
         private Dictionary<string, double> ResolveConverterVars(Dictionary<string, string> variables)
         {
@@ -1294,7 +1335,7 @@ namespace Bonsai.GenICam.GenApi
             foreach (var kv in variables)
             {
                 if (_nodes.TryGetValue(kv.Value, out var refNode))
-                    try { result[kv.Key] = Convert.ToDouble(ReadNode(refNode)); } catch { }
+                    try { result[kv.Key] = ReadNodeNumeric(refNode); } catch { }
             }
             return result;
         }
@@ -1305,7 +1346,7 @@ namespace Bonsai.GenICam.GenApi
             foreach (var kv in variables)
             {
                 if (_nodes.TryGetValue(kv.Value, out var refNode))
-                    result[kv.Key] = Convert.ToDouble(ReadNode(refNode));
+                    result[kv.Key] = ReadNodeNumeric(refNode);
             }
             return result;
         }
@@ -1420,9 +1461,14 @@ namespace Bonsai.GenICam.GenApi
                 while (true)
                 {
                     Skip();
+                    // C-style ==/!= and GenApi-standard single '=' (equal) / '<>' (not equal).
                     if (_i + 1 < _s.Length && _s[_i] == '=' && _s[_i + 1] == '=')
                     { _i += 2; left = (left == ParseRelational()) ? 1 : 0; }
+                    else if (_i < _s.Length && _s[_i] == '=')
+                    { _i += 1; left = (left == ParseRelational()) ? 1 : 0; }
                     else if (_i + 1 < _s.Length && _s[_i] == '!' && _s[_i + 1] == '=')
+                    { _i += 2; left = (left != ParseRelational()) ? 1 : 0; }
+                    else if (_i + 1 < _s.Length && _s[_i] == '<' && _s[_i + 1] == '>')
                     { _i += 2; left = (left != ParseRelational()) ? 1 : 0; }
                     else break;
                 }
@@ -1440,7 +1486,7 @@ namespace Bonsai.GenICam.GenApi
                     else if (_i + 1 < _s.Length && _s[_i] == '>' && _s[_i + 1] == '=')
                     { _i += 2; left = (left >= ParseShift()) ? 1 : 0; }
                     else if (_i < _s.Length && _s[_i] == '<' &&
-                             (_i + 1 >= _s.Length || _s[_i + 1] != '<'))
+                             (_i + 1 >= _s.Length || (_s[_i + 1] != '<' && _s[_i + 1] != '>')))
                     { _i++; left = (left < ParseShift()) ? 1 : 0; }
                     else if (_i < _s.Length && _s[_i] == '>' &&
                              (_i + 1 >= _s.Length || (_s[_i + 1] != '>' && _s[_i + 1] != '=')))

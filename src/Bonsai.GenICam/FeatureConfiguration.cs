@@ -74,7 +74,9 @@ namespace Bonsai.GenICam
         public string Name { get; }
         public string? DisplayValue { get; set; }
         public bool Overridden { get; set; }
-        public bool Writable { get; }
+        // Settable: a feature's writability can change live as a side effect of writing another
+        // feature (e.g. ExposureAuto=Continuous locks ExposureTime via pIsLocked).
+        public bool Writable { get; set; }
         public string? Category { get; set; }
         public string? Description { get; set; }
         public string? Unit { get; set; }
@@ -519,11 +521,24 @@ namespace Bonsai.GenICam
                     CheckBoxRenderer.DrawCheckBox(e.Graphics, pt, state);
                     e.Handled = true;
                 }
-                else if (entry.Kind == FeatureKind.Command && entry.Writable)
+                else if (entry.Kind == FeatureKind.Command)
                 {
                     e.Paint(e.ClipBounds, DataGridViewPaintParts.Background | DataGridViewPaintParts.Border | DataGridViewPaintParts.SelectionBackground);
                     var r = new Rectangle(e.CellBounds.X + 4, e.CellBounds.Y + 2, Math.Min(90, e.CellBounds.Width - 8), e.CellBounds.Height - 4);
-                    ButtonRenderer.DrawButton(e.Graphics, r, "Execute", grid.Font, false, PushButtonState.Normal);
+                    ButtonRenderer.DrawButton(e.Graphics, r, "Execute", grid.Font, false,
+                        entry.Writable ? PushButtonState.Normal : PushButtonState.Disabled);
+                    e.Handled = true;
+                }
+                else if (!entry.Writable)
+                {
+                    // Locked / read-only numeric, enum, or text value — render greyed so the
+                    // locked state is visible (a click does nothing for these cells).
+                    e.Paint(e.ClipBounds, DataGridViewPaintParts.Background | DataGridViewPaintParts.Border | DataGridViewPaintParts.SelectionBackground);
+                    bool selected = (e.State & DataGridViewElementStates.Selected) != 0;
+                    var fore = selected ? SystemColors.HighlightText : SystemColors.GrayText;
+                    var r = Rectangle.Inflate(e.CellBounds, -3, 0);
+                    TextRenderer.DrawText(e.Graphics, entry.DisplayValue ?? "", grid.Font, r, fore,
+                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
                     e.Handled = true;
                 }
             }
@@ -706,10 +721,69 @@ namespace Bonsai.GenICam
                 entry.Overridden = true;
                 int ri = FindRowIndex(entry);
                 if (ri >= 0) RefreshBoundRow(ri);
+                RefreshSelectedFeatures(map, entry.Name); // pSelected value side effects (incl. off-screen)
+                RefreshVisibleRows(map, entry.Name);      // value + writability side effects (e.g. pIsLocked)
             }
             catch (Exception ex)
             {
                 MessageBox.Show(this, $"Failed to write '{entry.Name}':\n{ex.Message}", "Feature Editor", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // After writing a selector, the features it governs (<pSelected>) now read back
+        // different values as a side effect — re-read them so their displayed rows aren't stale.
+        // Recurses, since a governed feature may itself be a selector governing further features;
+        // the visited set guards against selector cycles. Display-only: the targets weren't edited
+        // by the user, so they don't become overrides.
+        private void RefreshSelectedFeatures(NodeMap map, string selectorName)
+        {
+            var visited = new HashSet<string>(StringComparer.Ordinal) { selectorName };
+            RefreshSelectedFeaturesCore(map, selectorName, visited);
+        }
+
+        private void RefreshSelectedFeaturesCore(NodeMap map, string selectorName, HashSet<string> visited)
+        {
+            foreach (string target in map.GetSelectedFeatures(selectorName))
+            {
+                if (!visited.Add(target)) continue;
+                var targetEntry = _displayEntries.FirstOrDefault(e => string.Equals(e.Name, target, StringComparison.Ordinal));
+                if (targetEntry != null && targetEntry.Kind != FeatureKind.Command)
+                {
+                    try
+                    {
+                        var v = map.Read(target);
+                        targetEntry.DisplayValue = FeatureDisplayEntry.ValueToString(v.Value, targetEntry.Representation, targetEntry.DecimalPlaces, targetEntry.Notation);
+                        int ri = FindRowIndex(targetEntry);
+                        if (ri >= 0) RefreshBoundRow(ri);
+                    }
+                    catch { /* a selected feature may be unreadable in the current selector state — skip */ }
+                }
+                RefreshSelectedFeaturesCore(map, target, visited); // nested selector chains
+            }
+        }
+
+        // After a write, dependent features' writability (e.g. ExposureAuto=Continuous locking
+        // ExposureTime via pIsLocked) and values can change. Re-read the currently-visible rows
+        // in place so the grid reflects the new lock/value state without a manual Refresh.
+        private void RefreshVisibleRows(NodeMap map, string writtenName)
+        {
+            if (!(grid.DataSource is BindingList<FeatureDisplayEntry> bl)) return;
+            for (int i = 0; i < bl.Count; i++)
+            {
+                var e = bl[i];
+                if (string.Equals(e.Name, writtenName, StringComparison.Ordinal)) continue; // already refreshed
+                bool changed = false;
+                try { bool w = map.CanWrite(e.Name); if (w != e.Writable) { e.Writable = w; changed = true; } } catch { }
+                if (e.Kind != FeatureKind.Command)
+                {
+                    try
+                    {
+                        string s = FeatureDisplayEntry.ValueToString(map.Read(e.Name).Value, e.Representation, e.DecimalPlaces, e.Notation);
+                        if (!string.Equals(s, e.DisplayValue, StringComparison.Ordinal)) { e.DisplayValue = s; changed = true; }
+                    }
+                    catch { /* unreadable in current state — keep last value */ }
+                }
+                if (changed) RefreshBoundRow(i);
             }
         }
 
