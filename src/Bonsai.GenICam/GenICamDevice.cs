@@ -93,6 +93,17 @@ namespace Bonsai.GenICam
         // a UserSet instead. Used by the unit-test harness to validate chunk decoding end-to-end.
         internal bool EnableAllChunks { get; set; } = false;
 
+        /// <summary>
+        /// Runs the device as a source with no input connections: acquires frames (when
+        /// <see cref="AcquireFrames"/> is enabled) and applies startup overrides, without a
+        /// feature-request stream. Equivalent to processing an empty (never-completing) request
+        /// stream — the acquisition loop drives the observable's lifetime.
+        /// </summary>
+        public IObservable<GenICamMessage> Process()
+        {
+            return Process(Observable.Never<GenICamMessage>());
+        }
+
         /// <inheritdoc/>
         public override IObservable<GenICamMessage> Process(IObservable<GenICamMessage> source)
         {
